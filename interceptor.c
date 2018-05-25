@@ -277,8 +277,9 @@ void my_exit_group(int status)
  */
 asmlinkage long interceptor(struct pt_regs reg) {
 
-
-
+	//log_message(pid, syscall, arg1, arg2, arg3, arg4, arg5, arg6)
+	log_message(current->pid, reg.ax, reg.bx, reg.cx, reg.dx, reg.si, reg.di, reg.bp);
+	table[reg.ax].f(reg);
 
 
 	return 0; // Just a placeholder, so it compiles with no warnings!
@@ -365,10 +366,16 @@ long (*orig_custom_syscall)(void);
  * - Ensure synchronization as needed.
  */
 static int init_function(void) {
+	printk(KERN_DEBUG "loaded\n");
+	set_addr_rw(sys_call_table);
+    orig_custom_syscall = sys_call_table[MY_CUSTOM_SYSCALL];
+
+	sys_call_table[MY_CUSTOM_SYSCALL] = &my_syscall;
+	table[MY_CUSTOM_SYSCALL].f = &my_syscall;
+	table[MY_CUSTOM_SYSCALL].intercepted = 1;
 
 
-
-
+	set_add_ro(sys_call_table);
 
 
 
@@ -387,7 +394,7 @@ static int init_function(void) {
  */
 static void exit_function(void)
 {        
-
+	printk(KERN_DEBUG "unloaded\n");
 
 
 
