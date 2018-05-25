@@ -367,15 +367,15 @@ long (*orig_custom_syscall)(void);
  */
 static int init_function(void) {
 	printk(KERN_DEBUG "loaded\n");
-	set_addr_rw(sys_call_table);
+	set_addr_rw(&sys_call_table);
     orig_custom_syscall = sys_call_table[MY_CUSTOM_SYSCALL];
 
 	sys_call_table[MY_CUSTOM_SYSCALL] = &my_syscall;
-	table[MY_CUSTOM_SYSCALL].f = &my_syscall;
+	table[MY_CUSTOM_SYSCALL].f = my_syscall;
 	table[MY_CUSTOM_SYSCALL].intercepted = 1;
 
 
-	set_add_ro(sys_call_table);
+	set_addr_ro(&sys_call_table);
 
 
 
