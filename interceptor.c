@@ -233,6 +233,7 @@ static int check_pid_monitored(int sysc, pid_t pid) {
 /**
  * Since a process can exit without its owner specifically requesting
  * to stop monitoring it, we must intercept the exit_group system call
+
  * so that we can remove the exiting process's pid from *all* syscall lists.
  */  
 
@@ -277,10 +278,12 @@ void my_exit_group(int status)
  */
 asmlinkage long interceptor(struct pt_regs reg) {
 
-	//log_message(pid, syscall, arg1, arg2, arg3, arg4, arg5, arg6)
-	log_message(current->pid, reg.ax, reg.bx, reg.cx, reg.dx, reg.si, reg.di, reg.bp);
-	table[reg.ax].f(reg);
-
+	
+	if (check_pid_monitored(reg.ax, current->pid) != 0) {
+		log_message(current->pid, reg.ax, reg.bx, reg.cx, reg.dx, reg.si, reg.di, reg.bp);
+	}
+	
+	syscall();
 
 	return 0; // Just a placeholder, so it compiles with no warnings!
 }
@@ -367,20 +370,40 @@ long (*orig_custom_syscall)(void);
  */
 static int init_function(void) {
 	printk(KERN_DEBUG "loaded\n");
-	set_addr_rw(&sys_call_table);
+
+	// Locking the sys_call_table
+	spin_lock(&calltable_lock);
+	
+	set_addr_rw((unsigned long) sys_call_table);
+	
+	// Store the relevant functions
     orig_custom_syscall = sys_call_table[MY_CUSTOM_SYSCALL];
+	orig_exit_group = sys_call_table[__NR_exit_group];
+	
 
-	sys_call_table[MY_CUSTOM_SYSCALL] = &my_syscall;
-	table[MY_CUSTOM_SYSCALL].f = my_syscall;
-	table[MY_CUSTOM_SYSCALL].intercepted = 1;
+	// Hijack the exit_group and my_cutom_group;
+	sys_call_table[MY_CUSTOM_SYSCALL] = my_syscall;
+	sys_call_table[__NR_exit_group] = my_exit_group;
 
 
-	set_addr_ro(&sys_call_table);
+	set_addr_ro((unsigned long) sys_call_table);
 
+	// Unlocking the sys_call_table
+	spin_unlock(&calltable_lock);
 
+	
+	int i;
+	for(i = 0; i < NR_syscalls + 1; i++) {
+		table[i].f = sys_call_table[i];
+		table[i].intercepted = 0;
+		table[i].monitored = 0;
+		table[i].listcount = 0;
+		INIT_LIST_HEAD (&my_list);
+	}
 
 	return 0;
 }
+
 
 /**
  * Module exits. 
