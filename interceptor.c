@@ -401,6 +401,9 @@ static int init_function(void) {
 		INIT_LIST_HEAD (&my_list);
 	}
 
+	table[MY_CUSTOM_SYSCALL].intercepted = 1;
+	table[__NR_exit_group].intercepted = 1;
+	
 	return 0;
 }
 
