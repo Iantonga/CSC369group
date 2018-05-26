@@ -283,8 +283,7 @@ asmlinkage long interceptor(struct pt_regs reg) {
 		log_message(current->pid, reg.ax, reg.bx, reg.cx, reg.dx, reg.si, reg.di, reg.bp);
 	}
 	
-f
-	return 0; // Just a placeholder, so it compiles with no warnings!
+	return table[reg.ax].f(reg);
 }
 
 /**
@@ -337,26 +336,23 @@ f
  *   you might be holding, before you exit the function (including error cases!).  
  */
 asmlinkage long my_syscall(int cmd, int syscall, int pid) {
-
 	if (syscall < 0 || syscall > NR_syscalls || syscall == MY_CUSTOM_SYSCALL) {
 		return -EINVAL;
-	} else if () {
+	} 
 	
-	
-	}
-
 	switch (cmd) {
 		case REQUEST_SYSCALL_INTERCEPT:
-			if (table[syscall].intercepted == 1) {
-				return -EBUSY;
-			} 
 			
 			if (current_uid() != 0) {
+
 				return -EPERM;
 			}
 
-			
-			pid_task(find_vpid(pid), PIDTYPE_PID)
+			if (table[syscall].intercepted == 1) {
+
+				return -EBUSY;
+			} 
+
 
 			spin_lock(&calltable_lock);
 			set_addr_rw((unsigned long)sys_call_table);
@@ -424,7 +420,7 @@ long (*orig_custom_syscall)(void);
  */
 static int init_function(void) {
 	int i;
-	printk(KERN_DEBUG "loaded\n");
+	printk(KERN_DEBUG "loaded lol\n");
 	
 	// Aquiring lock for  the sys_call_table
 	spin_lock_init(&calltable_lock);
@@ -474,7 +470,7 @@ static int init_function(void) {
  */
 static void exit_function(void)
 {        
-	printk(KERN_DEBUG "unloaded\n");
+	printk(KERN_DEBUG "unloaded lol\n");
 	spin_lock(&calltable_lock);
 	set_addr_rw((unsigned long) sys_call_table); 
 	sys_call_table[MY_CUSTOM_SYSCALL] = orig_custom_syscall;
