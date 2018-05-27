@@ -420,7 +420,7 @@ long (*orig_custom_syscall)(void);
  */
 static int init_function(void) {
 	int i;
-	printk(KERN_DEBUG "loaded lol\n");
+	printk(KERN_DEBUG "loaded\n");
 	
 	// Aquiring lock for  the sys_call_table
 	spin_lock_init(&calltable_lock);
@@ -470,7 +470,7 @@ static int init_function(void) {
  */
 static void exit_function(void)
 {        
-	printk(KERN_DEBUG "unloaded lol\n");
+	printk(KERN_DEBUG "unloaded\n");
 	spin_lock(&calltable_lock);
 	set_addr_rw((unsigned long) sys_call_table); 
 	sys_call_table[MY_CUSTOM_SYSCALL] = orig_custom_syscall;
