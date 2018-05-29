@@ -221,7 +221,7 @@ static int check_pid_monitored(int sysc, pid_t pid) {
 	list_for_each(i, &(table[sysc].my_list)) {
 
 		ple=list_entry(i, struct pid_list, list);
-		if(ple->pid == pid) 
+yscall	if(ple->pid == pid) 
 			return 1;
 		
 	}
@@ -252,8 +252,11 @@ void (*orig_exit_group)(int);
  */
 void my_exit_group(int status)
 {
-
-
+	spin_lock(&pidlist_lock);
+	del_pid(current->pid);
+	spin_unlock(&pidlist_lock);
+	
+	orig_exit_group(status);	
 
 }
 //----------------------------------------------------------------
@@ -279,7 +282,7 @@ void my_exit_group(int status)
 asmlinkage long interceptor(struct pt_regs reg) {
 
 	
-	if (check_pid_monitored(reg.ax, current->pid) != 0) {
+	if ((check_pid_monitored(reg.ax, current->pid) != 0) || table[reg.ax].monitored == 2) {
 		log_message(current->pid, reg.ax, reg.bx, reg.cx, reg.dx, reg.si, reg.di, reg.bp);
 	}
 	
@@ -336,6 +339,9 @@ asmlinkage long interceptor(struct pt_regs reg) {
  *   you might be holding, before you exit the function (including error cases!).  
  */
 asmlinkage long my_syscall(int cmd, int syscall, int pid) {
+	int err_status;
+	
+	
 	if (syscall < 0 || syscall > NR_syscalls || syscall == MY_CUSTOM_SYSCALL) {
 		return -EINVAL;
 	} 
@@ -366,11 +372,12 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			break;
 
 		case REQUEST_SYSCALL_RELEASE:
-			if (table[syscall].intercepted == 0) {
-				return -EINVAL;
-			}
 			if (current_uid() != 0) {
 				return -EPERM;
+			}
+
+			if (table[syscall].intercepted == 0) {
+				return -EINVAL;
 			}
 
 
@@ -385,9 +392,41 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			break;
 
 		case REQUEST_START_MONITORING:
+			// Clean up needed! Perhaps this is wrong!
+			if (pid >= 0) {
+				if (pid == 0 || pid_task(find_vpid(pid), PIDTYPE_PID) != NULL) {
+					if (current_uid() == 0) {
+						continue;
+					} else if (check_pid_from_list(pid, current->pid) != 0){
+						return -EPERM;
+					} else if (curren_uid() != 0 && pid == 0) {
+						return -EPERM;
+					}
+					spin_lock(&pidlist_lock);
+					err_status = add_pid_sysc(pid, syscall);
+					
+					if (err_status != 0) {
+						return err_status;
+					}
+					if (pid == 0) {
+						table[syscall].monitored = 2;
+					} else {
+						table[syscall].monitored = 1;
+					}
+
+					spin_unlock(&pidlist_lock);
+				}
+
+			} else {
+				return -EINVAL;
+			}
 			break;
 
-		case REQUEST_STOP_MONITORING:
+		case REQUEST_STOP_MONITORING:	
+			if (pid >= 0) {
+				if (pid == 0 || pid_task(find_vpid(pid), PIDTYPE_PID) != NULL) {
+					
+				}
 			break;
 
 		default:
@@ -401,7 +440,6 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
  *
  */
 long (*orig_custom_syscall)(void);
-
 
 /**
  * Module initialization. 
@@ -424,6 +462,7 @@ static int init_function(void) {
 	
 	// Aquiring lock for  the sys_call_table
 	spin_lock_init(&calltable_lock);
+	spin_lock_init(&pidlist_lock);
 	spin_lock(&calltable_lock);
 	
 	set_addr_rw((unsigned long) sys_call_table);
@@ -440,9 +479,6 @@ static int init_function(void) {
 
 	set_addr_ro((unsigned long) sys_call_table);
 
-	// Releasing the lock for  the sys_call_table
-	spin_unlock(&calltable_lock);
-
 	for(i = 0; i < NR_syscalls + 1; i++) {
 		table[i].f = sys_call_table[i];
 		table[i].intercepted = 0;
@@ -453,6 +489,9 @@ static int init_function(void) {
 
 	table[MY_CUSTOM_SYSCALL].intercepted = 1;
 	table[__NR_exit_group].intercepted = 1;
+	
+	// Releasing the lock for  the sys_call_table
+	spin_unlock(&calltable_lock);
 	
 	return 0;
 }
