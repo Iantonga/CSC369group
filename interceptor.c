@@ -221,7 +221,7 @@ static int check_pid_monitored(int sysc, pid_t pid) {
 	list_for_each(i, &(table[sysc].my_list)) {
 
 		ple=list_entry(i, struct pid_list, list);
-yscall	if(ple->pid == pid) 
+		if(ple->pid == pid) 
 			return 1;
 		
 	}
@@ -281,7 +281,7 @@ void my_exit_group(int status)
  */
 asmlinkage long interceptor(struct pt_regs reg) {
 
-	
+	// SPECIAL CASE FOR THE BLACKLIST!
 	if ((check_pid_monitored(reg.ax, current->pid) != 0) || table[reg.ax].monitored == 2) {
 		log_message(current->pid, reg.ax, reg.bx, reg.cx, reg.dx, reg.si, reg.di, reg.bp);
 	}
@@ -392,41 +392,55 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			break;
 
 		case REQUEST_START_MONITORING:
-			// Clean up needed! Perhaps this is wrong!
-			if (pid >= 0) {
-				if (pid == 0 || pid_task(find_vpid(pid), PIDTYPE_PID) != NULL) {
-					if (current_uid() == 0) {
-						continue;
-					} else if (check_pid_from_list(pid, current->pid) != 0){
-						return -EPERM;
-					} else if (curren_uid() != 0 && pid == 0) {
-						return -EPERM;
-					}
-					spin_lock(&pidlist_lock);
-					err_status = add_pid_sysc(pid, syscall);
-					
-					if (err_status != 0) {
-						return err_status;
-					}
-					if (pid == 0) {
-						table[syscall].monitored = 2;
-					} else {
-						table[syscall].monitored = 1;
-					}
-
-					spin_unlock(&pidlist_lock);
+			if (pid < 0 || (pid != 0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL)) {
+				return -EINVAL; 
+			} else if (current_uid() != 0 && (check_pid_from_list(current->pid, pid) == -EPERM || pid == 0)) {
+				return -EPERM;	
+			} else if (check_pid_monitored(syscall, pid) == 1 || table[syscall].monitored == 2){
+				return -EBUSY;
+			} else {
+				spin_lock(&pidlist_lock);
+				if (pid == 0) {
+					// Destory the list because we are adding pid=0 (i.e. monitoring every pids)
+					destroy_list(syscall);
+					table[syscall].monitored = 2;
+				} else {
+					table[syscall].monitored = 1;
 				}
 
-			} else {
-				return -EINVAL;
+				err_status = add_pid_sysc(pid, syscall);
+				
+				if (err_status != 0) {
+					spin_unlock(&pidlist_lock);
+					return err_status;
+				}
+				spin_unlock(&pidlist_lock);
 			}
 			break;
 
-		case REQUEST_STOP_MONITORING:	
-			if (pid >= 0) {
-				if (pid == 0 || pid_task(find_vpid(pid), PIDTYPE_PID) != NULL) {
-					
+		case REQUEST_STOP_MONITORING:		
+			if (pid < 0 || (pid != 0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL)) {
+				return -EINVAL; 
+			} else if (current_uid() != 0 && (check_pid_from_list(current->pid, pid) == -EPERM || pid == 0)) {
+				return -EPERM;	
+			} else if (check_pid_monitored(syscall, pid) == 0 || table[syscall].monitored != 2 || table[syscall].intercepted == 0){	
+				return -EINVAL;
+			} else {
+				spin_lock(&pidlist_lock);
+				err_status = del_pid_sysc(pid, syscall);
+				if (err_status < 0) {
+					spin_unlock(&pidlist_lock);
+					return err_status;
 				}
+
+				if (table[syscall].listcount == 0) {
+					table[syscall].monitored = 0;
+				}
+
+				spin_unlock(&pidlist_lock);
+			
+			}
+				
 			break;
 
 		default:
