@@ -394,7 +394,7 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		case REQUEST_START_MONITORING:
 			if (pid < 0 || (pid != 0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL)) {
 				return -EINVAL; 
-			} else if (current_uid() != 0 && (check_pid_from_list(current->pid, pid) == -EPERM || pid == 0)) {
+			} else if (current_uid() != 0 && (pid == 0 || check_pid_from_list(current->pid, pid) == -EPERM)) {
 				return -EPERM;	
 			} else if (check_pid_monitored(syscall, pid) == 1 || table[syscall].monitored == 2){
 				return -EBUSY;
@@ -421,7 +421,7 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 		case REQUEST_STOP_MONITORING:		
 			if (pid < 0 || (pid != 0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL)) {
 				return -EINVAL; 
-			} else if (current_uid() != 0 && (check_pid_from_list(current->pid, pid) == -EPERM || pid == 0)) {
+			} else if (current_uid() != 0 && (pid == 0 || check_pid_from_list(current->pid, pid) == -EPERM)) {
 				return -EPERM;	
 			} else if (check_pid_monitored(syscall, pid) == 0 || table[syscall].monitored != 2 || table[syscall].intercepted == 0){	
 				return -EINVAL;
