@@ -340,7 +340,15 @@ asmlinkage long interceptor(struct pt_regs reg) {
  */
 asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 	int err_status;
-	
+	// SINCE WE ARE READING the table in the IF STATEMENTS for the error checking
+	// Do we need to spin_lock before the if statement! Does that make sense?
+
+	// Do we check if a syscall is intercepted in the REQUEST_START_MONITOR?
+	// ----- feel like we need to do more in the STOP monitor!
+
+	// Do we need a blacklist at all b/c it is not tested in test_full?
+
+	// FIXED: the order of the logic
 	
 	if (syscall < 0 || syscall > NR_syscalls || syscall == MY_CUSTOM_SYSCALL) {
 		return -EINVAL;
@@ -423,7 +431,8 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 				return -EINVAL; 
 			} else if (current_uid() != 0 && (pid == 0 || check_pid_from_list(current->pid, pid) == -EPERM)) {
 				return -EPERM;	
-			} else if (check_pid_monitored(syscall, pid) == 0 || table[syscall].monitored != 2 || table[syscall].intercepted == 0){	
+				// Need to check more condition, I feel like!
+			} else if (check_pid_monitored(syscall, pid) == 0 || table[syscall].monitored == 0 || table[syscall].intercepted == 0){	
 				return -EINVAL;
 			} else {
 				spin_lock(&pidlist_lock);
