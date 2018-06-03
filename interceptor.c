@@ -467,8 +467,11 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			} else if (current_uid() != 0 && (pid == 0 || check_pid_from_list(current->pid, pid) == -EPERM)) {
 				return -EPERM;	
 			} else if (check_pid_monitored(syscall, pid) == 0 || table[syscall].monitored == 0 || table[syscall].intercepted == 0){	
-				return -EINVAL;
-			} else {
+				// Testing if we are monitoring all pids but we need to check we are adding it to the blacklist!
+				if (check_pid_monitored(syscall, pid) == 0 && table[syscall].monitored != 2) {
+					return -EINVAL;
+				}
+			} 
 				
 				spin_lock(&pidlist_lock);
 				// If syscall is monitoring all pids and pid passed in is not 0
@@ -503,7 +506,7 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 					}
 
 				}
-			}
+			
 				
 			break;
 
