@@ -280,19 +280,15 @@ void my_exit_group(int status)
  * - Don't forget to call the original system call, so we allow processes to proceed as normal.
  */
 asmlinkage long interceptor(struct pt_regs reg) {
-	// If we are using blacklist:
-	//	 - check if pid is in blacklist:
-	//   	- call/return the syscall 
-	//   - if pid is blacklistn't:
-	//		- log the message
+	// Check whether we are using mylist as a blacklist or not!
+	//		(a) If we are using blacklist:
+	//			i. if pid is in blacklist return the original function
+	//			ii. o.w. log the message
+	//		(b) Not using mylist as blacklist:
+	//			i. if monitoring all or current->pid is in this syscall
+	//			   log the message
+	//			ii. o.w. call and return the status of the original function.
 
-	// we are NOT using blacklistn't:
-	// 	-check if the syscall is being monitored for the current pid or is being monitored for all syscalls
-	//  	-log 
-	//  else:
-	//  	
-
-	// Check if whether we are using mylist as a blacklist or not!
 	if (table[reg.ax].monitored == 2 && table[reg.ax].listcount > 1) {
 		if (check_pid_monitored(reg.ax, current->pid) == 1) {
 			return table[reg.ax].f(reg);
@@ -358,35 +354,27 @@ asmlinkage long interceptor(struct pt_regs reg) {
  *   you might be holding, before you exit the function (including error cases!).  
  */
 asmlinkage long my_syscall(int cmd, int syscall, int pid) {
+	// Storing the status when calling the provided pid-list functions above
 	int err_status;
-	// SINCE WE ARE READING the table in the IF STATEMENTS for the error checking
-	// Do we need to spin_lock before the if statement! Does that make sense?
-
-	// Do we check if a syscall is intercepted in the REQUEST_START_MONITOR?
-	// ----- feel like we need to do more in the STOP monitor!
-
-	// Do we need a blacklist at all b/c it is not tested in test_full?
-
-	// FIXED: the order of the logic
-	
 	if (syscall < 0 || syscall > NR_syscalls || syscall == MY_CUSTOM_SYSCALL) {
 		return -EINVAL;
 	} 
 	
+
+	// We have four cases for the command:
 	switch (cmd) {
 		case REQUEST_SYSCALL_INTERCEPT:
-			
+			// Only root can intercept!
 			if (current_uid() != 0) {
-
 				return -EPERM;
 			}
 
+			// Already been intercepted:
 			if (table[syscall].intercepted == 1) {
-
 				return -EBUSY;
 			} 
 
-
+			// We are good to hijack/intercept the syscall.
 			spin_lock(&calltable_lock);
 			set_addr_rw((unsigned long)sys_call_table);
 			
@@ -398,11 +386,13 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			spin_unlock(&calltable_lock);
 			break;
 
+
 		case REQUEST_SYSCALL_RELEASE:
 			if (current_uid() != 0) {
 				return -EPERM;
 			}
 
+			// It was never intercepted:
 			if (table[syscall].intercepted == 0) {
 				return -EINVAL;
 			}
@@ -418,39 +408,57 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			spin_unlock(&calltable_lock);
 			break;
 
+
 		case REQUEST_START_MONITORING:
+			// Pid has to be positive and exist or the syscall is intercepted.
 			if (pid < 0 || (pid != 0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL) || table[syscall].intercepted == 0) {
 				return -EINVAL; 
+
+			// If we are not root and pid == 0 or the calling process is not 
+			// related to the pid => no permission.
 			} else if (current_uid() != 0 && (pid == 0 || check_pid_from_list(current->pid, pid) == -EPERM)) {
 				return -EPERM;
+
+			// Check if the pid is already being monitored(monitored = 1 or 2)
 			} else if (check_pid_monitored(syscall, pid) == 1 || (table[syscall].monitored == 2 && table[syscall].listcount == 1)){
 				return -EBUSY;
+
+			// We are all good with error checking:
 			} else {
 				spin_lock(&pidlist_lock);
 
-				// If monitored == 2 && check if pid is in mylist (if we are using mylist as a blacklist then delete the pid)
+				// Two cases here:
+				// (1) We are using mylist as blacklist
+				// (2) We are using mylist like before.
+
+				// If we are using mylist as a blacklist then delete the pid.
 				if (table[syscall].monitored == 2 && check_pid_monitored(syscall, pid) == 1) {
 					err_status = del_pid_sysc(pid, syscall);
 					if (err_status < 0) {
 						spin_unlock(&pidlist_lock);
 						return err_status;
 					}
+
+				// We are not using mylist as blacklist and pid 0 is in mylist:
+				// we are monitoring all pids so we are busy.
 				} else if (table[syscall].monitored == 2 && check_pid_monitored(syscall, pid) == 0) {
 					spin_unlock(&pidlist_lock);
 					return -EBUSY;
+
+				// Not using mylist as a blacklist:
 				} else {
-				
-					
+
+					// Destory the list because we are adding pid=0 
+					// (i.e. monitoring every pids)
 					if (pid == 0) {
-						// Destory the list because we are adding pid=0 (i.e. monitoring every pids)
 						destroy_list(syscall);
 						table[syscall].monitored = 2;
+
 					} else {
 						table[syscall].monitored = 1;
 					}
-				
+					
 					err_status = add_pid_sysc(pid, syscall);
-				
 					if (err_status != 0) {
 						spin_unlock(&pidlist_lock);
 						return err_status;
@@ -461,53 +469,60 @@ asmlinkage long my_syscall(int cmd, int syscall, int pid) {
 			}
 			break;
 
+
 		case REQUEST_STOP_MONITORING:		
-			if (pid < 0 || (pid != 0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL)) {
-				return -EINVAL; 
+			if (pid < 0 || (pid != 0 && pid_task(find_vpid(pid), PIDTYPE_PID) == NULL) || table[syscall].intercepted == 0) {
+				return -EINVAL;
+
 			} else if (current_uid() != 0 && (pid == 0 || check_pid_from_list(current->pid, pid) == -EPERM)) {
 				return -EPERM;	
-			} else if (check_pid_monitored(syscall, pid) == 0 || table[syscall].monitored == 0 || table[syscall].intercepted == 0){	
-				// Testing if we are monitoring all pids but we need to check we are adding it to the blacklist!
-				if (check_pid_monitored(syscall, pid) == 0 && table[syscall].monitored != 2) {
-					return -EINVAL;
-				}
+
+	
+			// checking whether monitoring all pids but we need to check we are adding it to the blacklist or not!
+			} else if (check_pid_monitored(syscall, pid) == 0 && table[syscall].monitored != 2) {
+				return -EINVAL;
+
+			// If not being monitored or
+			//  => -EINVAL
+			} else if (table[syscall].monitored == 0){	
+				return -EINVAL;
 			} 
-				
-				spin_lock(&pidlist_lock);
-				// If syscall is monitoring all pids and pid passed in is not 0
-				if (table[syscall].monitored == 2 && pid != 0) {
-					err_status = add_pid_sysc(pid, syscall);
+			
+			spin_lock(&pidlist_lock);
+			// If syscall is monitoring all pids and pid passed in is not 0
+			// we add pid to the blaclist.
+			if (table[syscall].monitored == 2 && pid != 0) {
+				err_status = add_pid_sysc(pid, syscall);
+				if (err_status < 0) {
+					spin_unlock(&pidlist_lock);
+					return err_status;
+				}
+				spin_unlock(&pidlist_lock);
+
+			// Not using blacklist.
+			} else {
+			
+				// If pid == 0 destory the list!
+				if (pid == 0) {
+					destroy_list(syscall);
+					table[syscall].monitored = 0;
+					spin_unlock(&pidlist_lock);
+
+				} else {
+					
+					err_status = del_pid_sysc(pid, syscall);
 					if (err_status < 0) {
 						spin_unlock(&pidlist_lock);
 						return err_status;
 					}
-					spin_unlock(&pidlist_lock);
 
-				} else {
-				
-					// If pid == 0 destory the list!
-					if (pid == 0) {
-						
-						destroy_list(syscall);
-						spin_unlock(&pidlist_lock);
-					} else {
-						
-						err_status = del_pid_sysc(pid, syscall);
-						if (err_status < 0) {
-							spin_unlock(&pidlist_lock);
-							return err_status;
-						}
-	
-						if (table[syscall].listcount == 0) {
-							table[syscall].monitored = 0;
-						}
-
-						spin_unlock(&pidlist_lock);	
+					if (table[syscall].listcount == 0) {
+						table[syscall].monitored = 0;
 					}
 
+					spin_unlock(&pidlist_lock);	
 				}
-			
-				
+			}
 			break;
 
 		default:
@@ -559,6 +574,7 @@ static int init_function(void) {
 
 	set_addr_ro((unsigned long) sys_call_table);
 
+	// Initialize 'table'.
 	for(i = 0; i < NR_syscalls + 1; i++) {
 		table[i].f = sys_call_table[i];
 		table[i].intercepted = 0;
