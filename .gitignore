@@ -1,1 +1,4 @@
 .DS_Store
+blocked.dSYM
+matmul.dSYM
+simpleloop.dSYM
