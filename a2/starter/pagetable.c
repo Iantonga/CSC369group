@@ -40,8 +40,9 @@ int allocate_frame(pgtbl_entry_t *p) {
 		// Write victim page to swap, if needed, and update pagetable
 		// IMPLEMENTATION NEEDED
 		int swap_offset = swap_pageout((unsigned) frame, (int) p->swap_off);
+		p->frame = frame;
+		p->frame = p->frame << PAGE_SHIFT;
 		p->frame = p->frame | PG_ONSWAP;
-		p->frame = p->frame ^ PG_VALID;
 		p->swap_off = swap_offset;
 
 
