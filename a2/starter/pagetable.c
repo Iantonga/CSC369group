@@ -150,7 +150,7 @@ char *find_physpage(addr_t vaddr, char type) {
 	if (!(pgdir[idx].pde & PG_VALID)) {
 		pgdir[idx] = init_second_level();
 	}
-	unintptr_t page_table_ptr = pgdir[idx].pde;
+	uintptr_t page_table_ptr = pgdir[idx].pde;
 
 	// Use vaddr to get index into 2nd-level page table and initialize 'p'
 	unsigned pti = PGTBL_INDEX(vaddr);
@@ -168,7 +168,7 @@ char *find_physpage(addr_t vaddr, char type) {
 		}
 		// Or on swap
 		else {
-			if (err = swap_pagein((unsigned)frame_num, (int)p->swap_off) != 0) {
+			if (swap_pagein((unsigned)frame_num, (int)p->swap_off) != 0) {
 				// TODO: might do more handling!
 				exit(1);
 			}
