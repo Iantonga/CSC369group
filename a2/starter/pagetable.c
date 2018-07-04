@@ -35,15 +35,27 @@ int allocate_frame(pgtbl_entry_t *p) {
 	if(frame == -1) { // Didn't find a free page.
 		// Call replacement algorithm's evict function to select victim
 		frame = evict_fcn();
-
+		// printf("victim is: %d\n", frame);
 		// All frames were in use, so victim frame must hold some page
 		// Write victim page to swap, if needed, and update pagetable
 		// IMPLEMENTATION NEEDED
-		int swap_offset = swap_pageout((unsigned) frame, (int) p->swap_off);
-		p->frame = frame;
-		p->frame = p->frame << PAGE_SHIFT;
-		p->frame = p->frame | PG_ONSWAP;
-		p->swap_off = swap_offset;
+		int swap_offset = swap_pageout((unsigned) frame, (int) coremap[frame].pte->swap_off);
+		if (swap_offset == INVALID_SWAP){
+			exit(1);
+		}
+
+		// p->frame = frame;
+		// // Shifting it to the right already sets the valid bit to 0.
+		// p->frame = p->frame << PAGE_SHIFT;
+		// p->frame = p->frame | PG_ONSWAP;
+		// p->swap_off = swap_offset;
+
+		coremap[frame].pte->frame = coremap[frame].pte->frame | PG_ONSWAP;
+		if (coremap[frame].pte->frame & PG_VALID) {
+			coremap[frame].pte->frame = coremap[frame].pte->frame ^ PG_VALID;
+		}
+
+		coremap[frame].pte->swap_off = swap_offset;
 
 
 	}
@@ -150,25 +162,36 @@ char *find_physpage(addr_t vaddr, char type) {
 	// check if pde is valid, if not, init second level pgtbl and set pde
 	if (!(pgdir[idx].pde & PG_VALID)) {
 		pgdir[idx] = init_second_level();
+		// printf("Init 2nd table with %lx\n", pgdir[idx].pde);
 	}
-	uintptr_t page_table_ptr = pgdir[idx].pde;
+
+	// We used PAGE_MASK HERE or we could just xor with PG_VALID
+	uintptr_t page_table_ptr = pgdir[idx].pde & PAGE_MASK;
 
 	// Use vaddr to get index into 2nd-level page table and initialize 'p'
 	unsigned pti = PGTBL_INDEX(vaddr);
 
-	p = (pgtbl_entry_t *)(page_table_ptr + pti);
+	p = (pgtbl_entry_t *)(page_table_ptr + pti*sizeof(pgtbl_entry_t));
 
+	// printf("page dir #, page #, p->frame before: %x, %x, %x,      PTE_addr: %lx, p: %p\n", idx, pti, p->frame, pgdir[idx].pde, p);
 	// Check if p is valid or not, on swap or not, and handle appropriately
 
 	// If frame is invalid
 	if (!(p->frame & PG_VALID)) {
 		// And not on swap
-		int frame_num = allocate_frame(p);
 		if (!(p->frame & PG_ONSWAP)) {
+			int frame_num = allocate_frame(p);
+			p->frame = frame_num;
+			p->frame = p->frame << PAGE_SHIFT;
 			init_frame(frame_num, vaddr);
+
 		}
 		// Or on swap
 		else {
+			int frame_num = allocate_frame(p);
+			p->frame = frame_num;
+			p->frame = p->frame << PAGE_SHIFT;
+			// init_frame(frame_num, vaddr);
 			if (swap_pagein((unsigned)frame_num, (int)p->swap_off) != 0) {
 				// TODO: might do more handling!
 				exit(1);
@@ -178,9 +201,11 @@ char *find_physpage(addr_t vaddr, char type) {
 	} else {
 		hit_count++;
 	}
+	// THIS IS NOT CORRECT: WE DO NOT INCR when we brining the page for the first
+	// time into memory!. https://www.youtube.com/watch?v=8Z9-BvSXq_Q
 	ref_count++;
 
-
+	// printf("==vaddr:0x%lx, p->frame: 0x%x==\n", vaddr, p->frame);
 
 	// Make sure that p is marked valid and referenced. Also mark it
 	// dirty if the access type indicates that the page will be written to.
@@ -191,11 +216,13 @@ char *find_physpage(addr_t vaddr, char type) {
 		p->frame = p->frame | PG_DIRTY;
 	}
 
+	// printf("After 0x%x\n", p->frame);
 
 	// Call replacement algorithm's ref_fcn for this page
 	ref_fcn(p);
 
 	// Return pointer into (simulated) physical memory at start of frame
+	// printf("%d, vaddr: 0x%lx, pte: 0x%09x\n\n", (p->frame >> PAGE_SHIFT)*SIMPAGESIZE, vaddr, p->frame);
 	return  &physmem[(p->frame >> PAGE_SHIFT)*SIMPAGESIZE];
 }
 
