@@ -35,6 +35,12 @@ int allocate_frame(pgtbl_entry_t *p) {
 	if(frame == -1) { // Didn't find a free page.
 		// Call replacement algorithm's evict function to select victim
 		frame = evict_fcn();
+		if (coremap[frame].pte->frame & PG_DIRTY) {
+			evict_dirty_count ++;
+		}
+		else {
+			evict_clean_count ++;
+		}
 		// printf("victim is: %d\n", frame);
 		// All frames were in use, so victim frame must hold some page
 		// Write victim page to swap, if needed, and update pagetable
@@ -176,7 +182,7 @@ char *find_physpage(addr_t vaddr, char type) {
 	// printf("page dir #, page #, p->frame before: %x, %x, %x,      PTE_addr: %lx, p: %p\n", idx, pti, p->frame, pgdir[idx].pde, p);
 	// Check if p is valid or not, on swap or not, and handle appropriately
 
-	// If frame is invalid
+
 	if (!(p->frame & PG_VALID)) {
 		// And not on swap
 		if (!(p->frame & PG_ONSWAP)) {
@@ -205,16 +211,18 @@ char *find_physpage(addr_t vaddr, char type) {
 	// time into memory!. https://www.youtube.com/watch?v=8Z9-BvSXq_Q
 	ref_count++;
 
+
 	// printf("==vaddr:0x%lx, p->frame: 0x%x==\n", vaddr, p->frame);
 
 	// Make sure that p is marked valid and referenced. Also mark it
 	// dirty if the access type indicates that the page will be written to.
-
-	p->frame = p->frame | PG_REF;
-
-	if (type == 'M' && type == 'S') {
+	// If frame is invalid
+	if (type == 'M' || type == 'S') {
 		p->frame = p->frame | PG_DIRTY;
 	}
+
+
+
 
 	// printf("After 0x%x\n", p->frame);
 
@@ -222,6 +230,7 @@ char *find_physpage(addr_t vaddr, char type) {
 	ref_fcn(p);
 
 	p->frame = p->frame | PG_VALID;
+	p->frame = p->frame | PG_REF;
 
 	// Return pointer into (simulated) physical memory at start of frame
 	// printf("%d, vaddr: 0x%lx, pte: 0x%09x\n\n", (p->frame >> PAGE_SHIFT)*SIMPAGESIZE, vaddr, p->frame);
