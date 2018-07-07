@@ -209,10 +209,10 @@ char *find_physpage(addr_t vaddr, char type) {
 
 	// Make sure that p is marked valid and referenced. Also mark it
 	// dirty if the access type indicates that the page will be written to.
-	p->frame = p->frame | PG_VALID;
+
 	p->frame = p->frame | PG_REF;
 
-	if (type == 'M') {
+	if (type == 'M' && type == 'S') {
 		p->frame = p->frame | PG_DIRTY;
 	}
 
@@ -220,6 +220,8 @@ char *find_physpage(addr_t vaddr, char type) {
 
 	// Call replacement algorithm's ref_fcn for this page
 	ref_fcn(p);
+
+	p->frame = p->frame | PG_VALID;
 
 	// Return pointer into (simulated) physical memory at start of frame
 	// printf("%d, vaddr: 0x%lx, pte: 0x%09x\n\n", (p->frame >> PAGE_SHIFT)*SIMPAGESIZE, vaddr, p->frame);
