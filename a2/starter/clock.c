@@ -12,19 +12,18 @@ extern int debug;
 
 extern struct frame *coremap;
 
+/* The index in the coremap where this clock hand is "poitning" to.*/
 int clock_hand;
+
 /* Page to evict is chosen using the clock algorithm.
  * Returns the page frame number (which is also the index in the coremap)
  * for the page that is to be evicted.
  */
-
 int clock_evict() {
-	int evicted_frame = clock_hand;
 	while (coremap[clock_hand].pte->frame & PG_REF) {
 		coremap[clock_hand].pte->frame = coremap[clock_hand].pte->frame ^ PG_REF;
 		clock_hand = (clock_hand + 1) % memsize;
 	}
-	printf("rvict %d\n", clock_hand);
 	return clock_hand;
 }
 
@@ -33,34 +32,29 @@ int clock_evict() {
  * Input: The page table entry for the page that is being accessed.
  */
 void clock_ref(pgtbl_entry_t *p) {
-	// p is in the memory then we have a hit
+	// If this p is in memroy then we have a hit
 	if (p->frame & PG_VALID) {
+		// If this p was not referenced then we set the bit to 1.
 		if (!(p->frame & PG_REF)) {
 			p->frame = p->frame | PG_REF;
 		}
+
+	// This is the case where p was not in the memroy
 	} else {
-		printf("===== %d\n", coremap[clock_hand].pte->frame & PG_REF);
+		// If the frame that the clock_hand is "poiting" to is referenced
+		// then we ...
 		if (coremap[clock_hand].pte->frame & PG_REF) {
-				printf("we are here\n" );
 				while (coremap[clock_hand].pte->frame & PG_REF) {
 					coremap[clock_hand].pte->frame = coremap[clock_hand].pte->frame ^ PG_REF;
 					clock_hand = (clock_hand + 1) % memsize;
 				}
+		// This is the case where in the eviction function we change R=1 to R=0
+		// then here we set ...
 		} else {
 			coremap[clock_hand].pte->frame = coremap[clock_hand].pte->frame | PG_REF;
 			clock_hand = (clock_hand + 1) % memsize;
 		}
 	}
-	for (int i = 0; i < memsize; i++) {
-		if(coremap[i].pte != 0) {
-			printf("%d\n", coremap[i].pte->frame & PG_REF);
-		} else {
-			printf("empty\n");
-		}
-
-	}
-	printf("clock hand: %d\n", clock_hand);
-	printf("-------\n\n");
 	return;
 }
 
