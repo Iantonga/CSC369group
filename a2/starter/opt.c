@@ -9,8 +9,8 @@
 #include "sim.h"
 
 
-// #define HSIZE PTRS_PER_PGDIR * PTRS_PER_PGTBL
-#define HSIZE 3000
+#define HSIZE PTRS_PER_PGDIR * PTRS_PER_PGTBL
+// #define HSIZE 3000
 
 extern unsigned memsize;
 
@@ -100,6 +100,7 @@ void insert(addr_t vaddr) {
     // IF the index returned by hash equals to 0/NULL we put it there
     // If not we do probing (2 cases when probing we found a empty or we found
     // the vaddr)
+    // TODO: we could've used direct hashing but for now we use that has functions and hope for the best that we don't do probing that much!!
     if (hash_table[hash(vaddr)] == NULL) {
         hash_table[hash(vaddr)] = (struct hash_tbl_entry*)malloc(1*sizeof(struct hash_tbl_entry));
         hash_table[hash(vaddr)]->vaddr = vaddr;
@@ -228,7 +229,8 @@ void opt_ref(pgtbl_entry_t *p) {
  */
 void opt_init() {
 	current_trace = 0;
-	// TODO:CAN WRITE A FUNCTION THAT GETS THE number of unique pages!
+	// TODO:CAN WRITE A FUNCTION THAT GETS THE number of unique pages  or we could
+    // just use the SWAPSIZE if that's possible!
 	// Initialize the hash table
 	for (int i = 0; i < HSIZE; i++) {
 		hash_table[i] = NULL;
