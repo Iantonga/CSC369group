@@ -5,40 +5,88 @@
 #include <stdlib.h>
 #include "pagetable.h"
 
-#define HSIZE PTRS_PER_PGDIR * PTRS_PER_PGTBL
+// TODO: SHOULD WEEEEEE?????
+#include "sim.h"
 
-extern int memsize;
+
+// #define HSIZE PTRS_PER_PGDIR * PTRS_PER_PGTBL
+#define HSIZE 3000
+
+extern unsigned memsize;
 
 extern int debug;
 
 extern struct frame *coremap;
 
-// extern char *physmem;
-// extern char *tracefile;
+extern char *physmem;
+extern char *tracefile;
 
-unsigned int current_trace;
+int current_trace;
 
-
-
-/* Linked List for...*/
 struct Node {
-	unsigned int trace_index;
-	struct node* next;
+    int trace;
+    struct Node *next;
 };
 
-
 struct hash_tbl_entry {
-	addr_t vaddr;
-	struct Node *head;
-	struct Node *back;
-}
+    addr_t vaddr;
 
-/* TODO*/
+    // Linked List
+    struct Node *head;
+    struct Node *back;
+};
+
 struct hash_tbl_entry *hash_table[HSIZE];
 
+/* ================== START: LinkedList Functions ============ */
+void append(int index) {
+    struct Node *new_node = (struct Node*)malloc(sizeof(struct Node));
+    new_node->trace = current_trace;
+    new_node->next = NULL;
+
+    // List is empty
+    if (hash_table[index]->head == NULL) {
+        hash_table[index]->head = new_node;
+        hash_table[index]->back = new_node;
+    } else {
+        //the back of the list better not be None;
+        assert(hash_table[index]->back);
+        hash_table[index]->back->next = new_node;
+        hash_table[index]->back = new_node;
+    }
+}
+
+void delete(int index) {
+    // Front should not be None!
+    assert(hash_table[index]->head);
+    struct Node *deleted_node = hash_table[index]->head;
+    if (hash_table[index]->head == hash_table[index]->back) {
+        hash_table[index]->back = NULL;
+    }
+    hash_table[index]->head = hash_table[index]->head->next;
+
+    deleted_node->next = NULL;
+    free(deleted_node);
+}
+
+void print_list(int i) {
+    struct Node *curr = hash_table[i]->head;
+    if (curr != NULL) {
+        printf("%d->", curr->trace);
+        curr = curr->next;
+    }
+
+    while (curr) {
+        printf("%d->", curr->trace);
+        curr = curr->next;
+    }
+    printf("|\n");
+}
+/* ================== END: LinkedList Functions ============ */
+
+/* ================== START: Hash Table Functions ============ */
 /*TODO*/
 int hash(addr_t vaddr) {
-	// TODO
 	int multiplier;
 	if (PTRS_PER_PGDIR == 4096) {
 		multiplier = 16000057;
@@ -48,25 +96,80 @@ int hash(addr_t vaddr) {
 	return (vaddr * multiplier) % (HSIZE);
 }
 
-int insert(addr_t vaddr) {
+void insert(addr_t vaddr) {
+    // IF the index returned by hash equals to 0/NULL we put it there
+    // If not we do probing (2 cases when probing we found a empty or we found
+    // the vaddr)
+    if (hash_table[hash(vaddr)] == NULL) {
+        hash_table[hash(vaddr)] = (struct hash_tbl_entry*)malloc(1*sizeof(struct hash_tbl_entry));
+        hash_table[hash(vaddr)]->vaddr = vaddr;
+        hash_table[hash(vaddr)]->head = NULL;
+        hash_table[hash(vaddr)]->back = NULL;
+        append(hash(vaddr));
 
-	struct Node *new_node = (struct *Node)malloc(1 * sizeof(struct Node));
-	l->trace_index = current_trace;
-	l->next = NULL;
+    } else {
+        // PROBING (hash + i)
+        int i;
+        for (i = 0; i < HSIZE; i++) {
+            int index = (hash(vaddr) + i) % HSIZE;
+            if (hash_table[index] != NULL && hash_table[index]->vaddr == vaddr) {
+                // printf("We are doing linkedlist operations for %lx!\n", vaddr);
+                append(index);
+                break;
 
-	struct hash_tbl_entry *new_ent = (struct *hash_tbl_entry)malloc(1 * sizeof(struct hash_tbl_entry));
-	new_ent->vaddr = vaddr;
+            } else if (hash_table[index] == NULL) {
+                hash_table[index] = (struct hash_tbl_entry*)malloc(1*sizeof(struct hash_tbl_entry));
+                hash_table[index]->vaddr = vaddr;
+                hash_table[index]->head = NULL;
+                hash_table[index]->back = NULL;
+                append(index);
+                break;
+            }
+        }
+        if (i == HSIZE) {
+            fprintf(stderr, "hash table is not large enough! try running it with swapfilesize: for vaddr %lx\n", vaddr);
+            exit(1);
+        }
 
-	if (new_ent->head == NULL) {
-		new_ent->head = l;
-		new_ent->back = new_node;
-	}
-	if (hash_table[hash[vaddr]] == NULL) {
-		hash_table[hash[vaddr]] = ent;
-	} else {
-
-	}
+    }
 }
+
+
+int search(addr_t vaddr) {
+    if (hash_table[hash(vaddr)] != NULL && hash_table[hash(vaddr)]->vaddr == vaddr) {
+        return hash(vaddr);
+    } else {
+        for (int i = 0; i < HSIZE; i++) {
+            int index = (hash(vaddr) + i) % HSIZE;
+            if (hash_table[hash(vaddr)] != NULL && hash_table[index]->vaddr == vaddr) {
+                return index;
+            } else if (hash_table[index] == NULL) {
+                return -1;
+            }
+        }
+    }
+    return -1;
+}
+
+
+void print_hash_tbl() {
+    printf("+---------------+\n");
+    for (int i = 0; i < HSIZE; i++) {
+        if (hash_table[i] != NULL) {
+            printf("|%d, %lx|", i, hash_table[i]->vaddr);
+            printf(" ==> ");
+            print_list(i);
+
+        } else {
+            printf("|%d, NULL|\n", i);
+        }
+
+    }
+
+
+    printf("+--------------+\n");
+}
+/* ==================== END: Hash Table Functions ============= */
 
 
 
@@ -84,14 +187,19 @@ int opt_evict() {
 
 		int index = search(vaddr >> PAGE_SHIFT);
 		if (hash_table[index]->head == NULL) {
-			return i;
+			frame = i;
+            // printf("%lx this: NULL\n", vaddr);
+			// printf("%d====\n", frame);
+			return frame;
 		} else {
+			// printf("%lx this:%d\n", vaddr, hash_table[index]->head->trace);
 			if (max_trace < hash_table[index]->head->trace) {
 				max_trace = hash_table[index]->head->trace;
 				frame = i;
 			}
 		}
 	}
+	// printf("%d====\n", frame);
 	return frame;
 }
 
@@ -111,7 +219,6 @@ void opt_ref(pgtbl_entry_t *p) {
 	if (index != -1) {
 		delete(index);
 	}
-
 	current_trace ++;
 	return;
 }
@@ -120,13 +227,15 @@ void opt_ref(pgtbl_entry_t *p) {
  * replacement algorithm.
  */
 void opt_init() {
+	current_trace = 0;
+	// TODO:CAN WRITE A FUNCTION THAT GETS THE number of unique pages!
 	// Initialize the hash table
-
-	// CAN WRITE A FUNCTION THAT GETS THE number of unique pages!
-	memset(hash_table, NULL, HSIZE * sizeof(struct hash_tbl_entry));
+	for (int i = 0; i < HSIZE; i++) {
+		hash_table[i] = NULL;
+	}
 
 	// Open the file
-	FILE *tfp;
+	FILE *tfp = stdin;
 	if (tracefile != NULL) {
 		if((tfp = fopen(tracefile, "r")) == NULL) {
 			perror("Error opening tracefile:");
@@ -134,22 +243,21 @@ void opt_init() {
 		}
 	}
 
-
+	// Read from the trace file!
 	char buf[MAXLINE];
 	addr_t vaddr = 0;
+	// Just a placehodler
 	char type;
 	while(fgets(buf, MAXLINE, tfp) != NULL) {
 		if(buf[0] != '=') {
 			sscanf(buf, "%c %lx", &type, &vaddr);
-			if (search(vaddr) == NULL) {
-				insert(vaddr);
-			} else {
-				update(vaddr);
-			}
+			insert(vaddr >> PAGE_SHIFT);
+			current_trace ++;
 
 		} else {
 			continue;
 		}
-
 	}
+
+	current_trace = 0;
 }
