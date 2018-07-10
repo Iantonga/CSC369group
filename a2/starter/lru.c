@@ -12,13 +12,15 @@ extern int debug;
 
 extern struct frame *coremap;
 
-/* We use doubly linkedlist "stack" where the bottom points to the bottom of the "stack"
-* points to the top of the "stack"!
-*/
+/* We use doubly linked-list to implement a "stack" where bottom points to the
+ * bottom of the "stack" and top points to the top of the "stack". Basically,
+ * the nodes are the frames from the coremap.
+ */
 struct frame *bottom;
 struct frame *top;
 
-/* This indicates if this is the first access to memory, and tells us to initialize the top and bottom pointer*/
+/* This indicates if this is the first access to memory,
+and tells us to initialize the top and bottom pointer*/
 unsigned int size = 0;
 
 /* Page to evict is chosen using the accurate LRU algorithm.
@@ -27,9 +29,12 @@ unsigned int size = 0;
  */
 
 int lru_evict() {
+	// If the size of the stack is 1 (i.e. memesize = 1) we just return the first
+	// frame, we need this special case because the way we modified pointers
 	if (size == 1) {
 		return 0;
 	}
+	// Update the pointers to maintain the order of the linked list structure.
 	bottom->next->prev = NULL;
 	struct frame *temp = bottom->next;
 	bottom->next = NULL;
@@ -44,7 +49,7 @@ int lru_evict() {
  */
 void lru_ref(pgtbl_entry_t *p) {
 	int frame_num = p->frame >> PAGE_SHIFT;
-	// first time brining a node in
+	// First time brining a node in
 	if (size == 0) {
 		bottom = &coremap[frame_num];
 		top = &coremap[frame_num];
@@ -60,10 +65,13 @@ void lru_ref(pgtbl_entry_t *p) {
 		coremap[frame_num].prev = top;
 		coremap[frame_num].next = NULL;
 		top = &coremap[frame_num];
-	// hit
-
+	// On hit
+	// Referencing a page that was just used previously, aka top of the
+	// linked list
 	} else if (top == &coremap[frame_num]) {
 		// Do nothing
+	// Referencing a page that was at the bottom of the lnked list, bring it on
+	// top and maintain order
 	} else if (bottom == &coremap[frame_num]) {
 		coremap[frame_num].next->prev = NULL;
 		bottom = coremap[frame_num].next;
@@ -71,7 +79,8 @@ void lru_ref(pgtbl_entry_t *p) {
 		top->next = &coremap[frame_num];
 		coremap[frame_num].prev = top;
 		top = &coremap[frame_num];
-
+	// Referencing a page in the middle of the list, bring it on top and
+	// maintain order
 	} else {
 		coremap[frame_num].prev->next = coremap[frame_num].next;
 		coremap[frame_num].next->prev = coremap[frame_num].prev;

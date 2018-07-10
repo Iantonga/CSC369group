@@ -62,7 +62,7 @@ extern char *find_physpage(addr_t vaddr, char type);
 extern void print_pagedirectory(void);
 
 struct frame {
-	// We use a doubly linked list!
+	// These attributes used for LRU doubly linked list
 	struct frame *prev; // NEW attribute: points to the previous less recently referenced frame
 	struct frame *next; // NEW attribute: points to the next more recently referenced frame
 

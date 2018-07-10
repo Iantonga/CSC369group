@@ -20,6 +20,9 @@ int clock_hand;
  * for the page that is to be evicted.
  */
 int clock_evict() {
+	// While the clockhand points to a page that has the reference bit set to
+	// high, flip to low and increment the clockhand until we reach a page that
+	// already had its reference bit set to low, and that's the page we evict.
 	while (coremap[clock_hand].pte->frame & PG_REF) {
 		coremap[clock_hand].pte->frame = coremap[clock_hand].pte->frame ^ PG_REF;
 		clock_hand = (clock_hand + 1) % memsize;
@@ -41,16 +44,9 @@ void clock_ref(pgtbl_entry_t *p) {
 
 	// This is the case where p was not in the memroy
 	} else {
-		// If the frame that the clock_hand is "poiting" to is referenced
-		// then we ...
-		if (coremap[clock_hand].pte->frame & PG_REF) {
-				while (coremap[clock_hand].pte->frame & PG_REF) {
-					coremap[clock_hand].pte->frame = coremap[clock_hand].pte->frame ^ PG_REF;
-					clock_hand = (clock_hand + 1) % memsize;
-				}
-		// This is the case where in the eviction function we change R=1 to R=0
-		// then here we set ...
-		} else {
+		// Set the page that was just brought in's ref bit to high and increment
+		// the clock hand
+		if (!(coremap[clock_hand].pte->frame & PG_REF)) {
 			coremap[clock_hand].pte->frame = coremap[clock_hand].pte->frame | PG_REF;
 			clock_hand = (clock_hand + 1) % memsize;
 		}
