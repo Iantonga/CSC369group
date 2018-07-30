@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
     }
 
     /* Task 3: Directories*/
-    printf("\nDirectory blocks:");
+    printf("\nDirectory blocks:\n");
     for (int i = 0; i < total_inodes; i ++) {
         int inode_num = i + 1;
 
@@ -165,7 +165,25 @@ int main(int argc, char **argv) {
         // this time we consider those directories that are empty.
         if (i == 1 || inode_num >= EXT2_GOOD_OLD_FIRST_INO) {
             if (it[i].i_mode & EXT2_S_IFDIR) {
-                 
+				
+				for (int j = 0; j < 15; j++){
+					if (it[i].i_block[j]) {
+						if (j < 12) {	
+							
+							printf("   DIR BLOCK NUM: %d (for inode %d)\n", it[i].i_block[j], inode_num);
+							struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + it[i].i_block[j] * EXT2_BLOCK_SIZE);
+							int entry = 0;
+							while (entry < EXT2_BLOCK_SIZE / sizeof(struct ext2_dir_entry_2)) {
+								printf("Inode: %d rec_len: %d name_len: %c type= %c name=%s\n", de->inode, de->rec_len, de->name_len,
+									de->file_type, de->name);
+								entry += de->rec_len;
+							}
+							
+						}
+
+					}
+					
+				}
             }
         }
     }
