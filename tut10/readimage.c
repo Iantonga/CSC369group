@@ -98,12 +98,60 @@ int main(int argc, char **argv) {
 
             printf("[%d] type: %c size: %d links: %d blocks: %d\n",
                 inode_num, type, it[i].i_size, it[i].i_links_count, it[i].i_blocks);
-            printf("[%d] Blocks:", inode_num);
+
+
+            printf("[%d] Blocks: ", inode_num);
+
+            for (int ptr_i = 0; ptr_i < 15; ptr_i++) {
+                if (it[i].i_block[ptr_i]) {
+                    if (ptr_i < 12) {
+                        printf(" %d", it[i].i_block[ptr_i]);
+
+
+                        // single indirect pointer
+                    } else if (ptr_i == 12 ) {
+                        printf("\n  Single indirect block: ");
+                        unsigned int *s_indir = (unsigned int *)(disk + it[i].i_block[ptr_i] * EXT2_BLOCK_SIZE);
+                        for (int s = 0; s < EXT2_BLOCK_SIZE / sizeof(unsigned int); s++) {
+                            if (s_indir[s]) {
+                                printf(" %d", s_indir[s]);
+                            }
+                        }
+
+                        // double indirect poitner
+                    } else if (ptr_i == 13) {
+                        printf("\n    Duble indirect blocks: ");
+                        unsigned int *d_indir = (unsigned int *)(disk + it[i].i_block[ptr_i] * EXT2_BLOCK_SIZE);
+                        for (int d = 0; d < EXT2_BLOCK_SIZE / sizeof(unsigned int); d++) {
+                            if (d_indir[d]) {
+                                unsigned int *s_indir = (unsigned int *)(disk + d_indir[d] * EXT2_BLOCK_SIZE);
+                                for (int s = 0; s < EXT2_BLOCK_SIZE / sizeof(unsigned int); s++) {
+                                    printf(" %d", s_indir[s]);
+                                }
+                            }
+                        }
+                        // triple indirect pointer
+                    } else {
+                        printf("\n      Triple indirect blocks: ");
+                        unsigned int *t_indir = (unsigned int *)(disk + it[i].i_block[ptr_i] * EXT2_BLOCK_SIZE);
+                        for (int t = 0; t < EXT2_BLOCK_SIZE / sizeof(unsigned int); t++) {
+                            unsigned int *d_indir = (unsigned int *)(disk + t_indir[t] * EXT2_BLOCK_SIZE);
+                            for (int d = 0; d < EXT2_BLOCK_SIZE / sizeof(unsigned int); d++) {
+                                if (d_indir[d]) {
+                                    unsigned int *s_indir = (unsigned int *)(disk + d_indir[d] * EXT2_BLOCK_SIZE);
+                                    for (int s = 0; s < EXT2_BLOCK_SIZE / sizeof(unsigned int); s++) {
+                                        printf(" %d", s_indir[s]);
+                                    }
+                                }
+                            }
+                        }
+
+                    }
+                }
+            }
+            printf("\n");
         }
-
-
     }
-
 
     printf("\n");
     return 0;
