@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
     // printf("\n\nfirst nonres inode: %d, block group #: %d", sb->s_first_ino, sb->s_block_group_nr);
     printf("\n\nInodes:\n");
 
-    int i_tbl_location = gd->bg_inode_table;
+    unsigned int i_tbl_location = gd->bg_inode_table;
     struct ext2_inode *it = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
 
     for (int i = 0; i < total_inodes; i++) {
@@ -110,7 +110,8 @@ int main(int argc, char **argv) {
 
                         // single indirect pointer
                     } else if (ptr_i == 12 ) {
-                        printf("\n  Single indirect block: ");
+                        printf("\n\t");
+                        printf("  Single indirect blocks: ");
                         unsigned int *s_indir = (unsigned int *)(disk + it[i].i_block[ptr_i] * EXT2_BLOCK_SIZE);
                         for (int s = 0; s < EXT2_BLOCK_SIZE / sizeof(unsigned int); s++) {
                             if (s_indir[s]) {
@@ -120,6 +121,7 @@ int main(int argc, char **argv) {
 
                         // double indirect poitner
                     } else if (ptr_i == 13) {
+                        printf("\n\t");
                         printf("\n    Duble indirect blocks: ");
                         unsigned int *d_indir = (unsigned int *)(disk + it[i].i_block[ptr_i] * EXT2_BLOCK_SIZE);
                         for (int d = 0; d < EXT2_BLOCK_SIZE / sizeof(unsigned int); d++) {
@@ -132,7 +134,8 @@ int main(int argc, char **argv) {
                         }
                         // triple indirect pointer
                     } else {
-                        printf("\n      Triple indirect blocks: ");
+                        printf("\n\t");
+                        printf("\n    Triple indirect blocks: ");
                         unsigned int *t_indir = (unsigned int *)(disk + it[i].i_block[ptr_i] * EXT2_BLOCK_SIZE);
                         for (int t = 0; t < EXT2_BLOCK_SIZE / sizeof(unsigned int); t++) {
                             unsigned int *d_indir = (unsigned int *)(disk + t_indir[t] * EXT2_BLOCK_SIZE);
@@ -153,7 +156,21 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("\n");
+    /* Task 3: Directories*/
+    printf("\nDirectory blocks:");
+    for (int i = 0; i < total_inodes; i ++) {
+        int inode_num = i + 1;
+
+        // Care about root and nonreserved and also
+        // this time we consider those directories that are empty.
+        if (i == 1 || inode_num >= EXT2_GOOD_OLD_FIRST_INO) {
+            if (it[i].i_mode & EXT2_S_IFDIR) {
+                 
+            }
+        }
+    }
+
+
     return 0;
 
 }
