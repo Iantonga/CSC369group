@@ -12,14 +12,18 @@
 
 unsigned char *disk;
 
-struct ext2_dir_entry_2 *get_dir_entry(char *path) {
-    /* NOTE(strtok): Might need to copy argv to an array since they said there is a bug
-    if we use const (but for now there is none)*/
+// TODO: Do not forget s_inodes_per_group!
+int get_inode_from_path(char *abs_path) {
+    /* NOTE(strtok): need to copy abs_path to an array since they said there is a bug
+    if we use const it gets rid of the last '/'*/
+    char path[strlen(abs_path) + 1];
+    path[strlen(abs_path)] = '\0';
+    strncpy(path, abs_path, strlen(abs_path));
+
+
     struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
     unsigned int i_tbl_location = gd->bg_inode_table;
     struct ext2_inode *inodes = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
-
-    struct ext2_dir_entry_2 *de = NULL;
 
 
     /* We assume that path start at '/'. we subtract 1 since inode starts
@@ -29,7 +33,7 @@ struct ext2_dir_entry_2 *get_dir_entry(char *path) {
     char *token = NULL;
     token = strtok(path, "/");
     while( token != NULL ) {
-        printf( "%s\n", token );
+        // printf( "token: %s\n", token);
 
         if (inodes[inode_ind].i_mode & EXT2_S_IFDIR) {
             for (int b = 0; b < 15; b++) {
@@ -43,8 +47,19 @@ struct ext2_dir_entry_2 *get_dir_entry(char *path) {
                             char tmp_name[size + 1];
                             tmp_name[size] = '\0';
                             strncpy(tmp_name, de->name, size);
+                            // printf("%d %s\n", de->inode, tmp_name);
                             if (!strncmp(token, tmp_name, strlen(token)) && strlen(token) == size) {
                                 isfound = 1;
+                                inode_ind = de->inode - 1;
+                                if (de->file_type != EXT2_FT_DIR) {
+                                    char *substr = strstr(path, token);
+                                    int pos = substr - path;
+                                    // printf("%s: %c\n", path, path[pos + size]);
+                                    if (abs_path[pos + size] == '/') {
+                                        fprintf(stderr, "%s not a directory\n", token);
+                                        exit(0);
+                                    }
+                                }
                             }
                             curr_entry += de->rec_len;
                             de = (void *)de + de->rec_len;
@@ -54,21 +69,22 @@ struct ext2_dir_entry_2 *get_dir_entry(char *path) {
                         }
                     }
                 } else if (b == 13) {
-
+                    // TODO: Implement this
                 } else if (b == 14) {
-
+                    // TODO: Implement this
                 }
             }
 
         } else {
-            fprintf(stderr, "Something went wrong while traversing the root\n");
+            fprintf(stderr, "Not a directory\n");
             exit(1);
+
         }
 
         token = strtok(NULL, "/");
    }
 
-   return de;
+   return inode_ind;
 }
 
 
@@ -163,39 +179,47 @@ int main(int argc, char **argv) {
     	exit(1);
     }
 
-    printf("Disk img: %s\n", img_name);
+    int inode_index = get_inode_from_path(abs_path);
 
-    get_dir_entry(abs_path);
+   struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
+   unsigned int i_tbl_location = gd->bg_inode_table;
+   struct ext2_inode *it = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
 
-   // struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
-   // unsigned int i_tbl_location = gd->bg_inode_table;
-   // struct ext2_inode *it = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
 
    /* If the path lead to it[i] is either directory then list the contents of
    that directory o.w. just list that sing file.*/
-   // int root = EXT2_ROOT_INO - 1;
-   // for (int j = 0; j < 15; j++) {
-   //     if (j < 12) {
-   //         if (it[root].i_block[j]) {
-   //             struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + it[root].i_block[j] * EXT2_BLOCK_SIZE);
-   //             int curr_entry = 0;
-   //             if (!aflag) {
-   //                 curr_entry += de->rec_len;
-   //                 de = (void *)de + de->rec_len;
-   //                 curr_entry += de->rec_len;
-   //                 de = (void *)de + de->rec_len;
-   //             }
-   //
-   //             while (curr_entry < EXT2_BLOCK_SIZE) {
-   //                 char tmp_name[(int) de->name_len];
-   //                 memset(tmp_name, 0, de->name_len + 1);
-   //                 strncpy(tmp_name, de->name, de->name_len);
-   //                 printf("%s\n", tmp_name);
-   //                 curr_entry += de->rec_len;
-   //                 de = (void *)de + de->rec_len;
-   //             }
-   //         }
-   //     }
-   // }
+   if (inodes[inode_index].i_mode & EXT2_S_IFDIR) {
+       for (int j = 0; j < 15; j++) {
+           if (j < 12) {
+               if (it[inode_index].i_block[j]) {
+                   struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + it[inode_index].i_block[j] * EXT2_BLOCK_SIZE);
+                   int curr_entry = 0;
+                   if (!aflag) {
+                       /* Skip .*/
+                       curr_entry += de->rec_len;
+                       de = (void *)de + de->rec_len;
+
+                       /* Skip ..*/
+                       curr_entry += de->rec_len;
+                       de = (void *)de + de->rec_len;
+                   }
+
+                   while (curr_entry < EXT2_BLOCK_SIZE) {
+                       char tmp_name[(int) de->name_len];
+                       memset(tmp_name, 0, de->name_len + 1);
+                       strncpy(tmp_name, de->name, de->name_len);
+                       printf("%s\n", tmp_name);
+                       curr_entry += de->rec_len;
+                       de = (void *)de + de->rec_len;
+                   }
+               }
+           } else {
+               // TODO: Implement the other ones
+           }
+       }
+   } else {
+       
+   }
+
     return 0;
 }
