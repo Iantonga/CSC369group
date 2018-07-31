@@ -7,13 +7,13 @@
 #include <sys/mman.h>
 #include <string.h> /* Added this for strncpy*/
 #include <getopt.h> /* For getting the required arguments*/
+#include <errno.h>
 #include "ext2.h"
 
 
 unsigned char *disk;
 
-// TODO: Do not forget s_inodes_per_group!
-int get_inode_from_path(char *abs_path) {
+int get_inode_from_path(char *abs_path, int print_file) {
     /* NOTE(strtok): need to copy abs_path to an array since they said there is a bug
     if we use const it gets rid of the last '/'*/
     char path[strlen(abs_path) + 1];
@@ -34,14 +34,14 @@ int get_inode_from_path(char *abs_path) {
     token = strtok(path, "/");
     while( token != NULL ) {
         // printf( "token: %s\n", token);
-
+        int isfound = 0;
         if (inodes[inode_ind].i_mode & EXT2_S_IFDIR) {
-            for (int b = 0; b < 15; b++) {
+            for (int b = 0; b < 15 && !isfound; b++) {
                 if (b < 12) {
                     if (inodes[inode_ind].i_block[b]) {
                         struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + inodes[inode_ind].i_block[b] * EXT2_BLOCK_SIZE);
                         int curr_entry = 0;
-                        int isfound = 0;
+
                         while (curr_entry < EXT2_BLOCK_SIZE) {
                             int size = (int) de->name_len;
                             char tmp_name[size + 1];
@@ -52,20 +52,24 @@ int get_inode_from_path(char *abs_path) {
                                 isfound = 1;
                                 inode_ind = de->inode - 1;
                                 if (de->file_type != EXT2_FT_DIR) {
-                                    char *substr = strstr(path, token);
-                                    int pos = substr - path;
-                                    // printf("%s: %c\n", path, path[pos + size]);
+                                    char *substr = strstr(abs_path, token);
+                                    int pos = substr - abs_path;
                                     if (abs_path[pos + size] == '/') {
-                                        fprintf(stderr, "%s not a directory\n", token);
-                                        exit(0);
+                                        fprintf(stderr, "No such file or directory\n");
+                                        return -ENOENT;
+                                    }
+                                    if (print_file) {
+                                        printf("%s\n", tmp_name);
                                     }
                                 }
+                                break;
                             }
                             curr_entry += de->rec_len;
                             de = (void *)de + de->rec_len;
                         }
                         if (!isfound) {
-                            fprintf(stderr, "%s does not exist!\n", token);
+                            fprintf(stderr, "No such file or directory\n");
+                            return -ENOENT;
                         }
                     }
                 } else if (b == 13) {
@@ -76,8 +80,8 @@ int get_inode_from_path(char *abs_path) {
             }
 
         } else {
-            fprintf(stderr, "Not a directory\n");
-            exit(1);
+            fprintf(stderr, "No such file or directory\n");
+            return ENOENT;
 
         }
 
@@ -179,7 +183,11 @@ int main(int argc, char **argv) {
     	exit(1);
     }
 
-    int inode_index = get_inode_from_path(abs_path);
+    int inode_index = get_inode_from_path(abs_path, 1);
+    if (inode_index < 0) {
+        return ENOENT;
+    }
+
 
    struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
    unsigned int i_tbl_location = gd->bg_inode_table;
@@ -188,7 +196,7 @@ int main(int argc, char **argv) {
 
    /* If the path lead to it[i] is either directory then list the contents of
    that directory o.w. just list that sing file.*/
-   if (inodes[inode_index].i_mode & EXT2_S_IFDIR) {
+   if (it[inode_index].i_mode & EXT2_S_IFDIR) {
        for (int j = 0; j < 15; j++) {
            if (j < 12) {
                if (it[inode_index].i_block[j]) {
@@ -218,7 +226,7 @@ int main(int argc, char **argv) {
            }
        }
    } else {
-       
+       // TODO: print the file only
    }
 
     return 0;
