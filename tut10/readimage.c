@@ -5,7 +5,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <string.h> /* Added this for strncpy*/
+
 #include "ext2.h"
+
 
 unsigned char *disk;
 
@@ -163,27 +166,72 @@ int main(int argc, char **argv) {
 
         // Care about root and nonreserved and also
         // this time we consider those directories that are empty.
-        if (i == 1 || inode_num >= EXT2_GOOD_OLD_FIRST_INO) {
+        if (i == 1 || inode_num > EXT2_GOOD_OLD_FIRST_INO) {
             if (it[i].i_mode & EXT2_S_IFDIR) {
-				
-				for (int j = 0; j < 15; j++){
-					if (it[i].i_block[j]) {
-						if (j < 12) {	
-							
-							printf("   DIR BLOCK NUM: %d (for inode %d)\n", it[i].i_block[j], inode_num);
-							struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + it[i].i_block[j] * EXT2_BLOCK_SIZE);
-							int entry = 0;
-							while (entry < EXT2_BLOCK_SIZE / sizeof(struct ext2_dir_entry_2)) {
-								printf("Inode: %d rec_len: %d name_len: %c type= %c name=%s\n", de->inode, de->rec_len, de->name_len,
-									de->file_type, de->name);
-								entry += de->rec_len;
-							}
-							
-						}
 
-					}
-					
-				}
+                // For i_block[j]
+                for (int j = 0; j < 15; j++) {
+                    if (j < 12) {
+                        if (it[i].i_block[j]) {
+                            printf("   DIR BLOCK NUM: %d (for inode %d)\n", it[i].i_block[j], inode_num);
+                            struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + it[i].i_block[j] * EXT2_BLOCK_SIZE);
+                            int curr_entry = 0;
+                            char type = ' ';
+                            while (curr_entry < EXT2_BLOCK_SIZE) {
+                                if (de->file_type == EXT2_FT_REG_FILE) {
+                                    type = 'f';
+                                } else if (de->file_type == EXT2_FT_DIR) {
+                                    type = 'd';
+                                } else if (de->file_type == EXT2_FT_SYMLINK) {
+                                    type = 'l';
+                                }
+                                printf("Inode: %d rec_len: %d name_len: %d type= %c ",
+                                    de->inode, de->rec_len, de->name_len, type);
+
+                                /* For the 'name' we need add a null pointer to
+                                the end since the size is not determined */
+
+                                char tmp_name[(int) de->name_len];
+                                memset(tmp_name, 0, de->name_len + 1);
+                                strncpy(tmp_name, de->name, de->name_len);
+                                printf("name= %s\n", tmp_name);
+
+                                // char *print_name = malloc(sizeof(char) * de->name_len + 1);
+                                // int u;
+                                // for (u = 0; u < de->name_len; u++) {
+                                //     print_name[u] = de->name[u];
+                                // }
+                                // print_name[de->name_len] = '\0';
+                                // printf("type= %c ", type);
+                                // printf("name=%s\n", print_name);
+                                // free(print_name);
+
+                                curr_entry += de->rec_len;
+                                /* AFAIK there are 2 methods to move a pointer by
+                                   bytes and not by single units (i.e.sizeof(structs))
+                                */
+
+                                /*Method 1:
+                                char *tmp_ptr = (char *) de;
+                                tmp_ptr += de->rec_len;
+                                de = (struct ext2_dir_entry_2 *)tmp_ptr;
+                                */
+
+                                /*Method 2:*/
+                                de = (void *)de + de->rec_len;
+
+                            }
+
+
+
+
+
+
+                        }
+                    } else {
+                        // NOTE: Not required for this excerise
+                    }
+                }
             }
         }
     }
