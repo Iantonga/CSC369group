@@ -1,7 +1,8 @@
 # FLAGS = -Wall -g -std=gnu99
-FLAGS = -Wall -g
+FLAGS = -Wall
 DEPENDENCIES = ext2.h
 EXEC = ext2_ls
+# EXEC = ext2_ls.o
 
 all : $(EXEC)
 
