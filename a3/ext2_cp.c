@@ -24,7 +24,7 @@ void copy_file_test(FILE *fsrc, FILE *fdest) {
 		}
 	}
 }
-;
+
 int get_free_bitmap(struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char *bitmap_ptr) {
 
     int pos = 0;
@@ -41,8 +41,26 @@ int get_free_bitmap(struct ext2_super_block *sb, struct ext2_group_desc *gd, uns
 
 }
 
-int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char *blk_map_ptr) {
-    char visited_blocks[sb->s_blocks_count]; 
+/* Having a copy of the bitmap is better to work with*/
+int get_free_bitmap2(struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char bitmap_ptr[]) {
+
+    int pos = 0;
+    while (pos < sb->s_blocks_count) {
+        int bit_map_byte = pos / 8;
+        int bit_pos = pos % 8;
+        if ((bitmap_ptr[bit_map_byte] >> bit_pos) & 1) {
+            pos ++;
+        } else {
+            char found_bit = 1 << bit_pos;
+            bitmap_ptr[bit_map_byte] |= found_bit;
+            return pos;
+        }
+    }
+    return -1;
+
+}
+
+int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char blk_map_ptr[]) {
     char data[1024];
     int total_bytes_read = 0;
     int block_bytes_read = 0;
@@ -51,13 +69,14 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
     unsigned char *block_ptr;
     size_t r;
     while ((r = fread(&data, sizeof(char), 1024, fsrc)) != 0) {
-        pos_free = get_free_bitmap(sb, gd, blk_map_ptr);
+        pos_free = get_free_bitmap2(sb, gd, blk_map_ptr);
         block_ptr = disk + EXT2_BLOCK_SIZE * pos_free;
         sprintf((char *) block_ptr, "%s", data);
         inode->i_block[index] = pos_free;
         block_bytes_read += r;
         total_bytes_read += r;
         index ++;
+        memset(&data, 0, sizeof(data));
         if (index == 13) {
             // TODO
         } else if (index == 14) {
@@ -71,10 +90,10 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
 
 }
 
-void create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, FILE *fsrc, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char *blk_map_ptr) {
+void create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, FILE *fsrc, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char blk_map_ptr[]) {
     struct timeval tv;
     gettimeofday(&tv,NULL);
-    memset(&inode_tbl[pos], 0, sizeof(inode_tbl[pos]));
+    memset(&inode_tbl[pos], 0, sizeof(inode_tbl[pos])); // NOTE: problem may arise!
     inode_tbl[pos].i_mode |= 0x8000;
     inode_tbl[pos].i_ctime = tv.tv_usec;
 
@@ -107,6 +126,30 @@ void parse_cmd(int argc, char **argv, char **img, char **os_path, char **ext2_pa
     if (*ext2_path[0] != '/') {
         fprintf(stderr, "ERROR: Absolute path should start with '/'\n");
         exit(1);
+    }
+}
+
+
+void change(unsigned char b[]) {
+    int bit_map_byte = 22 / 8;
+    int bit_pos = 22 % 8;
+    char tmp = 1 << bit_pos;
+    b[2] |= tmp;
+}
+
+void dude(unsigned char b[]) {
+    int i;
+    int k;
+    // printf("%d\n", num_bit);
+    printf("\nBlock bitmap: ");
+    /* Looping through the bit map block byte by byte. */
+    for (i = 0; i < 16; i++) {
+
+        /* Looping through each bit a byte. */
+        for (k = 0; k < 8; k++) {
+            printf("%d", (b[i] >> k) & 1);
+        }
+        printf(" ");
     }
 }
 
@@ -162,8 +205,22 @@ int main(int argc, char **argv) {
         return ENOSPC;
     }
 
+    /* NOTE: Copy of the block bitmap*/
+    // ==================================NEW===========================
+    unsigned char block_bitmap_copy[sb->s_blocks_count / 8];
+    for (int i = 0; i < 16; i++) {
+        block_bitmap_copy[i] = bb_ptr[i];
+    }
 
-    create_inode(free_ib_pos, inode_tbl, ib_ptr, fsrc, sb, gd, bb_ptr);
+    // dude(block_bitmap_copy);
+    // change(block_bitmap_copy);
+    // dude(block_bitmap_copy);
+    // printf("\n");
+
+    create_inode(free_ib_pos, inode_tbl, ib_ptr, fsrc, sb, gd, block_bitmap_copy);
+    // ================================================================
+
+    // create_inode(free_ib_pos, inode_tbl, ib_ptr, fsrc, sb, gd, bb_ptr);
 
     /* If it doesn't exist make a new file in the ext2 */
 
