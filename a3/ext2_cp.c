@@ -149,6 +149,7 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
         if (pos_free < 0) {
             return -ENOSPC;
         }
+        gd->bg_free_blocks_count -= 1;
         if (index < 12) {
             block_ptr = disk + EXT2_BLOCK_SIZE * pos_free;
             sprintf((char *) block_ptr, "%s", data);
@@ -162,6 +163,7 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
                 if (pos_free < 0) {
                     return -ENOSPC;
                 }
+                gd->bg_free_blocks_count -= 1;
             }
             if (s_index < EXT2_BLOCK_SIZE / sizeof(unsigned int)) {
 
@@ -213,11 +215,10 @@ int create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, F
     }
 
     inode_tbl[pos].i_size = size;
+    inode_tbl[pos].i_blocks = EXT2_BLOCK_SIZE / (EXT2_BLOCK_SIZE / 2);
+    inode_tbl[pos].i_links_count = 1;
 
-    // int bit_map_byte = pos / 8;
-    // int bit_pos = pos % 8;
-    // char found_bit = 1 << bit_pos;
-    // ib_ptr[bit_map_byte] |= found_bit;
+    gd->bg_free_inodes_count -= 1;
 
 
     return 1;
