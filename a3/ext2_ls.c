@@ -213,6 +213,8 @@ int main(int argc, char **argv) {
                    }
 
                    while (curr_entry < EXT2_BLOCK_SIZE) {
+                       // printf("curr_entry: %d\n", curr_entry);
+                       // printf("curr_entry += rec: %d\n", curr_entry + de->rec_len);
                        char tmp_name[(int) de->name_len];
                        memset(tmp_name, 0, de->name_len + 1);
                        strncpy(tmp_name, de->name, de->name_len);

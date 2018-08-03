@@ -8,6 +8,7 @@
 #include <string.h> /* Added this for strncpy*/
 #include <getopt.h> /* For getting the required arguments*/
 #include <libgen.h> /* For basename*/
+#include <assert.h>
 #include <errno.h>
 #include <sys/time.h> /* For timestamp */
 #include <string.h> /* For memset */
@@ -15,15 +16,86 @@
 
 unsigned char *disk;
 
-void copy_file_test(FILE *fsrc, FILE *fdest) {
-    char data;
-	while (fread(&data, sizeof(char), 1, fsrc) == 1) {
-		if (fwrite(&data, sizeof(char), 1, fdest) < 1) {
-			perror("fwrite");
-			exit(-1);
-		}
-	}
+// WARNING: This is a reptitive code!!!!!!!!!
+int get_inode_from_path(char *abs_path, int print_file) {
+    /* NOTE(strtok): need to copy abs_path to an array since they said there is a bug
+    if we use const it gets rid of the last '/'*/
+    char path[strlen(abs_path) + 1];
+    path[strlen(abs_path)] = '\0';
+    strncpy(path, abs_path, strlen(abs_path));
+
+
+    struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
+    unsigned int i_tbl_location = gd->bg_inode_table;
+    struct ext2_inode *inodes = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
+
+
+    /* We assume that path start at '/'. we subtract 1 since inode starts
+    at 1 instead of 0. */
+    int inode_ind = EXT2_ROOT_INO - 1;
+
+    char *token = NULL;
+    token = strtok(path, "/");
+    while( token != NULL ) {
+        // printf( "token: %s\n", token);
+        int isfound = 0;
+        if (inodes[inode_ind].i_mode & EXT2_S_IFDIR) {
+            for (int b = 0; b < 15 && !isfound; b++) {
+                if (b < 12) {
+                    if (inodes[inode_ind].i_block[b]) {
+                        struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + inodes[inode_ind].i_block[b] * EXT2_BLOCK_SIZE);
+                        int curr_entry = 0;
+
+                        while (curr_entry < EXT2_BLOCK_SIZE) {
+                            int size = (int) de->name_len;
+                            char tmp_name[size + 1];
+                            tmp_name[size] = '\0';
+                            strncpy(tmp_name, de->name, size);
+                            // printf("%d %s\n", de->inode, tmp_name);
+                            if (!strncmp(token, tmp_name, strlen(token)) && strlen(token) == size) {
+                                isfound = 1;
+                                inode_ind = de->inode - 1;
+                                if (de->file_type != EXT2_FT_DIR) {
+                                    char *substr = strstr(abs_path, token);
+                                    int pos = substr - abs_path;
+                                    if (abs_path[pos + size] == '/') {
+                                        fprintf(stderr, "No such file or directory\n");
+                                        return -ENOENT;
+                                    }
+                                    if (print_file) {
+                                        printf("%s\n", tmp_name);
+                                    }
+                                }
+                                break;
+                            }
+                            curr_entry += de->rec_len;
+                            de = (void *)de + de->rec_len;
+                        }
+                        if (!isfound) {
+                            fprintf(stderr, "No such file or directory\n");
+                            return -ENOENT;
+                        }
+                    }
+                } else if (b == 12) {
+                    // TODO: Implement this
+                } else {
+                    // TODO: Implement this
+                }
+            }
+
+        } else {
+            fprintf(stderr, "No such file or directory\n");
+            return ENOENT;
+
+        }
+
+        token = strtok(NULL, "/");
+   }
+
+   return inode_ind;
 }
+
+// TODO: need to update the gd and sb as well.
 
 int get_free_bitmap(struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char *bitmap_ptr) {
 
@@ -42,10 +114,10 @@ int get_free_bitmap(struct ext2_super_block *sb, struct ext2_group_desc *gd, uns
 }
 
 /* Having a copy of the bitmap is better to work with*/
-int get_free_bitmap2(struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char bitmap_ptr[]) {
+int get_free_bitmap2(struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char bitmap_ptr[], unsigned int count) {
 
     int pos = 0;
-    while (pos < sb->s_blocks_count) {
+    while (pos < count) {
         int bit_map_byte = pos / 8;
         int bit_pos = pos % 8;
         if ((bitmap_ptr[bit_map_byte] >> bit_pos) & 1) {
@@ -65,48 +137,92 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
     int total_bytes_read = 0;
     int block_bytes_read = 0;
     int index = 0;
+    int s_index = 0;
+    // int d_index = 0; /* Not needed for this assignement*/
+    // int t_index = 0;  /* Not needed fo this assignment*/
     int pos_free = 0;
     unsigned char *block_ptr;
+
     size_t r;
     while ((r = fread(&data, sizeof(char), 1024, fsrc)) != 0) {
-        pos_free = get_free_bitmap2(sb, gd, blk_map_ptr);
-        block_ptr = disk + EXT2_BLOCK_SIZE * pos_free;
-        sprintf((char *) block_ptr, "%s", data);
-        inode->i_block[index] = pos_free;
+        pos_free = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count);
+        if (pos_free < 0) {
+            return -ENOSPC;
+        }
+        if (index < 12) {
+            block_ptr = disk + EXT2_BLOCK_SIZE * pos_free;
+            sprintf((char *) block_ptr, "%s", data);
+            inode->i_block[index] = pos_free;
+            index ++;
+
+        } else if (index == 12) {
+            if (s_index == 0) {
+                inode->i_block[index] = pos_free;
+                pos_free = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count);
+                if (pos_free < 0) {
+                    return -ENOSPC;
+                }
+            }
+            if (s_index < EXT2_BLOCK_SIZE / sizeof(unsigned int)) {
+
+                block_ptr = disk + EXT2_BLOCK_SIZE * pos_free;
+                sprintf((char *) block_ptr, "%s", data);
+                unsigned int *s_indir = (unsigned int *)(disk + inode->i_block[index] * EXT2_BLOCK_SIZE);
+                s_indir[s_index] = pos_free;
+                s_index ++;
+            } else {
+                s_index = 0;
+                index ++;
+            }
+
+        } else if (index == 13) {
+            fprintf(stderr, "i_block[13] is not required to  be implemented\n" );
+            exit(1);
+        } else if (index == 14) {
+            fprintf(stderr, "i_block[14] is not required to  be implemented\n" );
+            exit(1);
+        } else {
+            fprintf(stderr, "Error index out of bound for i_block[15]\n");
+            exit(1);
+        }
+
         block_bytes_read += r;
         total_bytes_read += r;
-        index ++;
+
         memset(&data, 0, sizeof(data));
-        if (index == 13) {
-            // TODO
-        } else if (index == 14) {
-            // TODO
-        } else {
-            fprintf(stderr, "what?\n");
-        }
+
+
+
     }
 
     return total_bytes_read;
 
 }
 
-void create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, FILE *fsrc, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char blk_map_ptr[]) {
+int create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, FILE *fsrc, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char blk_map_ptr[]) {
     struct timeval tv;
     gettimeofday(&tv,NULL);
+
     memset(&inode_tbl[pos], 0, sizeof(inode_tbl[pos])); // NOTE: problem may arise!
     inode_tbl[pos].i_mode |= 0x8000;
     inode_tbl[pos].i_ctime = tv.tv_usec;
 
-
     int size = copy_file(fsrc, &inode_tbl[pos], sb, gd, blk_map_ptr);
-    //int size = copy_file(fsrc, &(inode_tbl[pos].i_block), sb, gd, blk_map_ptr);
+    if (size < 0) {
+        return -ENOSPC;
+    }
+
+    inode_tbl[pos].i_size = size;
+
+    // int bit_map_byte = pos / 8;
+    // int bit_pos = pos % 8;
+    // char found_bit = 1 << bit_pos;
+    // ib_ptr[bit_map_byte] |= found_bit;
 
 
+    return 1;
 
 }
-
-
-
 
 
 void parse_cmd(int argc, char **argv, char **img, char **os_path, char **ext2_path) {
@@ -130,20 +246,13 @@ void parse_cmd(int argc, char **argv, char **img, char **os_path, char **ext2_pa
 }
 
 
-void change(unsigned char b[]) {
-    int bit_map_byte = 22 / 8;
-    int bit_pos = 22 % 8;
-    char tmp = 1 << bit_pos;
-    b[2] |= tmp;
-}
-
-void dude(unsigned char b[]) {
+void dude(unsigned char b[], int size) {
     int i;
     int k;
     // printf("%d\n", num_bit);
-    printf("\nBlock bitmap: ");
+    printf("bitmap: ");
     /* Looping through the bit map block byte by byte. */
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < size; i++) {
 
         /* Looping through each bit a byte. */
         for (k = 0; k < 8; k++) {
@@ -196,35 +305,117 @@ int main(int argc, char **argv) {
     unsigned int i_tbl_location = gd->bg_inode_table;
     struct ext2_inode *inode_tbl = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
 
-    // int free_bb_pos;
-    // if (( free_bb_pos = get_free_bitmap(sb, gd, bb_ptr)) < 0) {
-    //     return ENOSPC;
-    // }
-    int free_ib_pos;
-    if (( free_ib_pos = get_free_bitmap(sb, gd, ib_ptr)) < 0) {
-        return ENOSPC;
+
+
+    int inode_index = get_inode_from_path(ext2_path, 0);
+    if (inode_index < 0) {
+        return ENOENT;
     }
 
     /* NOTE: Copy of the block bitmap*/
-    // ==================================NEW===========================
     unsigned char block_bitmap_copy[sb->s_blocks_count / 8];
     for (int i = 0; i < 16; i++) {
         block_bitmap_copy[i] = bb_ptr[i];
     }
 
-    // dude(block_bitmap_copy);
-    // change(block_bitmap_copy);
-    // dude(block_bitmap_copy);
-    // printf("\n");
+    // WARNING: repetitive code
+    int isfound = 0;
+    if (inode_tbl[inode_index].i_mode & EXT2_S_IFDIR) {
 
-    create_inode(free_ib_pos, inode_tbl, ib_ptr, fsrc, sb, gd, block_bitmap_copy);
-    // ================================================================
+        // ==================================NEW===========================
 
-    // create_inode(free_ib_pos, inode_tbl, ib_ptr, fsrc, sb, gd, bb_ptr);
+        int free_ib_pos;
+        if (( free_ib_pos = get_free_bitmap2(sb, gd, ib_ptr, sb->s_inodes_count)) < 0) {
+            return ENOSPC;
+        }
 
-    /* If it doesn't exist make a new file in the ext2 */
+        int err = create_inode(free_ib_pos, inode_tbl, ib_ptr, fsrc, sb, gd, block_bitmap_copy);
+        if (err < 0) {
+            fprintf(stderr, "Not enough space!\n");
+            return ENOSPC;
+        }
+        // ================================================================
+        for (int j = 0; j < 15 && !isfound; j++) {
+            if (j < 12) {
+                struct ext2_dir_entry_2 *curr_de = (struct ext2_dir_entry_2 *)(disk + inode_tbl[inode_index].i_block[j] * EXT2_BLOCK_SIZE);
+                struct ext2_dir_entry_2 *prev_de = NULL;
+                if (inode_tbl[inode_index].i_block[j]) {
+                    int curr_entry = 0;
+                    int newf_metadata_size = sizeof(unsigned int) + sizeof(short) + sizeof(char) * 2 + strlen(fsrc_name);
+                    while (curr_entry < EXT2_BLOCK_SIZE) {
+                        int metadata_size = sizeof(unsigned int) + sizeof(short) + sizeof(char) * 2 + curr_de->name_len;
+                        int remaining_bytes = curr_de->rec_len - (metadata_size);
+                        if ( remaining_bytes >= newf_metadata_size) {
+                            // If it is marked as deleted
+                            // WARNING: repetitive
+                            if (inode_tbl[curr_de->inode].i_dtime) {
+                                prev_de = curr_de;
+                                curr_de->inode = free_ib_pos + 1;
+                                curr_de->rec_len = prev_de->rec_len - metadata_size;
+                                curr_de->name_len = strlen(fsrc_name);
+                                curr_de->file_type = EXT2_FT_REG_FILE;
+                                prev_de->rec_len = metadata_size;
 
-    /*If the file already exists.*/
+                            } else {
+                                prev_de = curr_de;
+                                curr_de = (void *)curr_de + metadata_size;
+                                curr_de->inode = free_ib_pos + 1;
+                                curr_de->rec_len = prev_de->rec_len - metadata_size;
+                                curr_de->name_len = strlen(fsrc_name);
+                                curr_de->file_type = EXT2_FT_REG_FILE;
+                                strncpy(curr_de->name, fsrc_name, strlen(fsrc_name));
+                                assert(prev_de); // It shouldn't be None
+                                prev_de->rec_len = metadata_size;
+
+                                printf("inode: %d, rec_len: %d, file_type: %d, name: %s\n", curr_de->inode, curr_de->rec_len, curr_de->file_type, curr_de->name);
+
+                            }
+                            isfound = 1;
+                            break;
+
+                        } else {
+                            prev_de = curr_de;
+                            curr_entry += curr_de->rec_len;
+                            curr_de = (void *)curr_de + curr_de->rec_len;
+                        }
+                    }
+                } else {
+                    curr_de->inode = free_ib_pos + 1;
+                    curr_de->rec_len = EXT2_S_IFDIR;
+                    curr_de->name_len = strlen(fsrc_name);
+                    curr_de->file_type = EXT2_FT_REG_FILE;
+                    strncpy(curr_de->name, fsrc_name, strlen(fsrc_name));
+                }
+            } else {
+                // TODO: Implement the other one for j == 13 only
+            }
+        }
+    } else if (inode_tbl[inode_index].i_mode & EXT2_S_IFREG){
+        // we overwrite
+
+        // Set the block of the file that is being overwritten to 0.
+        for (int i = 0; i < 15; i++) {
+            int bit_map_byte =  inode_tbl[inode_index].i_block[i] / 8;
+            int bit_pos = inode_tbl[inode_index].i_block[i] % 8;
+            bb_ptr[bit_map_byte] =  (bb_ptr[bit_map_byte] >> bit_pos) & 0;
+            inode_tbl[inode_index].i_block[i] = 0;
+        }
+
+
+        int size = copy_file(fsrc, &inode_tbl[inode_index], sb, gd, block_bitmap_copy);
+        if (size < 0) {
+            return -ENOSPC;
+        }
+        inode_tbl[inode_index].i_size = size;
+
+    }
+
+    // Update the bb_ptr;
+    for (int i = 0; i < 16; i ++) {
+        bb_ptr[i] = block_bitmap_copy[i];
+    }
+
+
 
 
 
