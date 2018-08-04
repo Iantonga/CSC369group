@@ -222,7 +222,7 @@ int create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, F
     inode_tbl[pos].i_links_count = 1;
 
     gd->bg_free_inodes_count -= 1;
-    sb->s_free_inodes_count;
+    sb->s_free_inodes_count -= 1;
 
 
     return 1;
