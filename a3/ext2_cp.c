@@ -98,19 +98,24 @@ int get_inode_from_path(char *abs_path, int print_file) {
 
 // TODO: need to update the gd and sb as well.
 
-int get_free_bitmap(struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char *bitmap_ptr) {
+int get_free_bitmap(struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char bitmap_ptr[], unsigned int count) {
 
-    int pos = 0;
-    while (pos < sb->s_blocks_count) {
-        int bit_map_byte = pos / 8;
-        int bit_pos = pos % 8;
-        if ((bitmap_ptr[bit_map_byte] >> bit_pos) & 1) {
-            pos ++;
-        } else {
-            return pos;
-        }
-    }
-    return -1;
+    // int pos = 0;
+    // while (pos < sb->s_blocks_count) {
+    //     int bit_map_byte = pos / 8;
+    //     int bit_pos = pos % 8;
+    //     if ((bitmap_ptr[bit_map_byte] >> bit_pos) & 1) {
+    //         pos ++;
+    //     } else {
+    //         return pos;
+    //     }
+    // }
+    // return -1;
+    int bit_map_byte = 34 / 8;
+    int bit_pos = 34 % 8;
+    char found_bit = 1 << bit_pos;
+    bitmap_ptr[bit_map_byte] |= found_bit;
+    return 34;
 
 }
 
@@ -146,7 +151,8 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
 
     size_t r;
     while ((r = fread(&data, sizeof(char), 1024, fsrc)) != 0) {
-        pos_free = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count);
+        pos_free = get_free_bitmap(sb, gd, blk_map_ptr, sb->s_blocks_count);
+        pos_free = 34;
         if (pos_free < 0) {
             return -ENOSPC;
         }
@@ -161,7 +167,7 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
         } else if (index == 12) {
             if (s_index == 0) {
                 inode->i_block[index] = pos_free;
-                pos_free = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count);
+                pos_free = get_free_bitmap(sb, gd, blk_map_ptr, sb->s_blocks_count);
                 if (pos_free < 0) {
                     return -ENOSPC;
                 }
