@@ -227,8 +227,8 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
 int create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, FILE *fsrc, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char blk_map_ptr[]) {
     memset(&inode_tbl[pos], 0, sizeof(inode_tbl[pos])); // NOTE: problem may arise!
     inode_tbl[pos].i_mode |= 0x8000;
-    inode_tbl[pos].i_mode |= 0x002;
-    inode_tbl[pos].i_mode |= 0x004;
+    // inode_tbl[pos].i_mode |= 0x002;
+    // inode_tbl[pos].i_mode |= 0x004;
     inode_tbl[pos].i_atime = (unsigned int)time(NULL);
     inode_tbl[pos].i_ctime = (unsigned int)time(NULL);
     inode_tbl[pos].i_mtime = (unsigned int)time(NULL);
@@ -405,14 +405,20 @@ int main(int argc, char **argv) {
                         }
                     }
                 } else {
+                    int free_bb_pos;
+                    if (( free_bb_pos = get_free_bitmap2(sb, gd, bb_ptr, sb->s_blocks_count)) < 0) {
+                        return ENOSPC;
+                    }
+                    inode_tbl[inode_index].i_block[j] = free_bb_pos;
+
                     curr_de->inode = free_ib_pos + 1;
-                    curr_de->rec_len = EXT2_S_IFDIR;
+                    curr_de->rec_len = EXT2_BLOCK_SIZE;
                     curr_de->name_len = strlen(fsrc_name);
                     curr_de->file_type = EXT2_FT_REG_FILE;
                     strncpy(curr_de->name, fsrc_name, strlen(fsrc_name));
                 }
             } else {
-                // TODO: Implement the other one for j == 13 only
+                // TODO: Implement the other one for j == 12 only
             }
         }
     } else if (inode_tbl[inode_index].i_mode & EXT2_S_IFREG){
