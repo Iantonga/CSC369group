@@ -151,8 +151,7 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
 
     size_t r;
     while ((r = fread(&data, sizeof(char), 1024, fsrc)) != 0) {
-        pos_free = get_free_bitmap(sb, gd, blk_map_ptr, sb->s_blocks_count);
-        pos_free = 34;
+        pos_free = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count);
         if (pos_free < 0) {
             return -ENOSPC;
         }
@@ -166,8 +165,8 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
 
         } else if (index == 12) {
             if (s_index == 0) {
-                inode->i_block[index] = pos_free;
-                pos_free = get_free_bitmap(sb, gd, blk_map_ptr, sb->s_blocks_count);
+                inode->i_block[index] = pos_free + 1;
+                pos_free = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count);
                 if (pos_free < 0) {
                     return -ENOSPC;
                 }
@@ -179,7 +178,7 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
                 block_ptr = disk + EXT2_BLOCK_SIZE * pos_free;
                 sprintf((char *) block_ptr, "%s", data);
                 unsigned int *s_indir = (unsigned int *)(disk + inode->i_block[index] * EXT2_BLOCK_SIZE);
-                s_indir[s_index] = pos_free;
+                s_indir[s_index] = pos_free + 1;
                 s_index ++;
             } else {
                 s_index = 0;
@@ -317,7 +316,7 @@ int main(int argc, char **argv) {
     struct ext2_inode *inode_tbl = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
 
 
-
+    // Get the inode index of the path specified!
     int inode_index = get_inode_from_path(ext2_path, 0);
     if (inode_index < 0) {
         return ENOENT;
