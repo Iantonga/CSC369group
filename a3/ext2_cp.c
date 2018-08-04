@@ -17,13 +17,13 @@
 unsigned char *disk;
 
 
-// int ceil(float num) {
-//     int inum = (int)num;
-//     if (num == (float)inum) {
-//         return inum;
-//     }
-//     return inum + 1;
-// }
+int my_ceil(float num) {
+    int inum = (int)num;
+    if (num == (float)inum) {
+        return inum;
+    }
+    return inum + 1;
+}
 
 int round_up(int num, int mult) {
     int r =  num % mult;
@@ -238,7 +238,7 @@ int create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, F
     }
 
     inode_tbl[pos].i_size = size;
-    inode_tbl[pos].i_blocks = ceil(size / (EXT2_BLOCK_SIZE / 2.0));
+    inode_tbl[pos].i_blocks = my_ceil(size / (EXT2_BLOCK_SIZE / 2.0));
     inode_tbl[pos].i_links_count = 1;
 
     gd->bg_free_inodes_count -= 1;
