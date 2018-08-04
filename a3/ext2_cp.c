@@ -10,7 +10,7 @@
 #include <libgen.h> /* For basename*/
 #include <assert.h>
 #include <errno.h>
-#include <sys/time.h> /* For timestamp */
+#include <time.h> /* For timestamp */
 #include <string.h> /* For memset */
 #include "ext2.h"
 
@@ -225,12 +225,13 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
 }
 
 int create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, FILE *fsrc, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char blk_map_ptr[]) {
-    struct timeval tv;
-    gettimeofday(&tv,NULL);
-
     memset(&inode_tbl[pos], 0, sizeof(inode_tbl[pos])); // NOTE: problem may arise!
     inode_tbl[pos].i_mode |= 0x8000;
-    inode_tbl[pos].i_ctime = tv.tv_usec;
+    inode_tbl[pos].i_mode |= 0x002;
+    inode_tbl[pos].i_mode |= 0x004;
+    inode_tbl[pos].i_atime = (unsigned int)time(NULL);
+    inode_tbl[pos].i_ctime = (unsigned int)time(NULL);
+    inode_tbl[pos].i_mtime = (unsigned int)time(NULL);
 
     int size = copy_file(fsrc, &inode_tbl[pos], sb, gd, blk_map_ptr);
     if (size < 0) {
