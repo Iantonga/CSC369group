@@ -160,7 +160,7 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
         if (index < 12) {
             block_ptr = disk + EXT2_BLOCK_SIZE * pos_free;
             sprintf((char *) block_ptr, "%s", data);
-            inode->i_block[index] = pos_free;
+            inode->i_block[index] = pos_free + 1;
             index ++;
 
         } else if (index == 12) {
@@ -223,7 +223,7 @@ int create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, F
     }
 
     inode_tbl[pos].i_size = size;
-    inode_tbl[pos].i_blocks = ceil(EXT2_BLOCK_SIZE / (EXT2_BLOCK_SIZE / 2));
+    inode_tbl[pos].i_blocks = ceil(size / (EXT2_BLOCK_SIZE / 2));
     inode_tbl[pos].i_links_count = 1;
 
     gd->bg_free_inodes_count -= 1;
