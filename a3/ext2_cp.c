@@ -13,9 +13,25 @@
 #include <sys/time.h> /* For timestamp */
 #include <string.h> /* For memset */
 #include "ext2.h"
-#include <math.h>
 
 unsigned char *disk;
+
+
+int ceil(float num) {
+    int inum = (int)num;
+    if (num == (float)inum) {
+        return inum
+    }
+    return inum + 1;
+}
+
+int round_up(int num, int mult) {
+    int r =  num % mult;
+    if (!r) {
+        return num;
+    }
+    return (num + mult) - r;
+}
 
 // WARNING: This is a reptitive code!!!!!!!!!
 int get_inode_from_path(char *abs_path, int print_file) {
@@ -140,6 +156,7 @@ int get_free_bitmap2(struct ext2_super_block *sb, struct ext2_group_desc *gd, un
 
 int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char blk_map_ptr[]) {
     char data[1024];
+    memset(&data, 0, sizeof(data));
     int total_bytes_read = 0;
     int block_bytes_read = 0;
     int index = 0;
@@ -158,7 +175,7 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
         gd->bg_free_blocks_count -= 1;
         sb->s_free_blocks_count -= 1;
         if (index < 12) {
-            block_ptr = disk + EXT2_BLOCK_SIZE * pos_free;
+            block_ptr = disk + EXT2_BLOCK_SIZE * (pos_free + 1);
             sprintf((char *) block_ptr, "%s", data);
             inode->i_block[index] = pos_free + 1;
             index ++;
@@ -175,7 +192,7 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
             }
             if (s_index < EXT2_BLOCK_SIZE / sizeof(unsigned int)) {
 
-                block_ptr = disk + EXT2_BLOCK_SIZE * pos_free;
+                block_ptr = disk + EXT2_BLOCK_SIZE * (pos_free + 1);
                 sprintf((char *) block_ptr, "%s", data);
                 unsigned int *s_indir = (unsigned int *)(disk + inode->i_block[index] * EXT2_BLOCK_SIZE);
                 s_indir[s_index] = pos_free + 1;
@@ -201,8 +218,6 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
 
         memset(&data, 0, sizeof(data));
 
-
-
     }
 
     return total_bytes_read;
@@ -223,7 +238,7 @@ int create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, F
     }
 
     inode_tbl[pos].i_size = size;
-    inode_tbl[pos].i_blocks = ceil(size / (EXT2_BLOCK_SIZE / 2));
+    inode_tbl[pos].i_blocks = ceil(size / (EXT2_BLOCK_SIZE / 2.0));
     inode_tbl[pos].i_links_count = 1;
 
     gd->bg_free_inodes_count -= 1;
@@ -354,6 +369,7 @@ int main(int argc, char **argv) {
                     int newf_metadata_size = sizeof(unsigned int) + sizeof(short) + sizeof(char) * 2 + strlen(fsrc_name);
                     while (curr_entry < EXT2_BLOCK_SIZE) {
                         int metadata_size = sizeof(unsigned int) + sizeof(short) + sizeof(char) * 2 + curr_de->name_len;
+                        metadata_size = round_up(metadata_size, 4);
                         int remaining_bytes = curr_de->rec_len - (metadata_size);
                         if ( remaining_bytes >= newf_metadata_size) {
                             // If it is marked as deleted
@@ -374,10 +390,8 @@ int main(int argc, char **argv) {
                                 curr_de->name_len = strlen(fsrc_name);
                                 curr_de->file_type = EXT2_FT_REG_FILE;
                                 strncpy(curr_de->name, fsrc_name, strlen(fsrc_name));
-                                assert(prev_de); // It shouldn't be None
                                 prev_de->rec_len = metadata_size;
 
-                                printf("inode: %d, rec_len: %d, file_type: %d, name: %s\n", curr_de->inode, curr_de->rec_len, curr_de->file_type, curr_de->name);
 
                             }
                             isfound = 1;
