@@ -218,7 +218,11 @@ int main(int argc, char **argv) {
                        char tmp_name[(int) de->name_len];
                        memset(tmp_name, 0, de->name_len + 1);
                        strncpy(tmp_name, de->name, de->name_len);
-                       printf("%s\n", tmp_name);
+                       if (de->file_type == EXT2_FT_DIR) {
+                           printf("%s/\n", tmp_name);
+                       } else {
+                           printf("%s\n", tmp_name);
+                       }
                        curr_entry += de->rec_len;
                        de = (void *)de + de->rec_len;
                    }
