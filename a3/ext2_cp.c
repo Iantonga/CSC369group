@@ -171,7 +171,7 @@ int copy_file(FILE *fsrc, struct ext2_inode* inode, struct ext2_super_block *sb,
                 if (pos_free < 0) {
                     return -ENOSPC;
                 }
-                gd->bg_free_inodes_count -= 1;
+                gd->bg_free_blocks_count -= 1;
                 sb->s_free_blocks_count -= 1;
             }
             if (s_index < EXT2_BLOCK_SIZE / sizeof(unsigned int)) {
