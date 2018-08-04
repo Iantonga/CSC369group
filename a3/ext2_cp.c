@@ -17,13 +17,13 @@
 unsigned char *disk;
 
 
-int ceil(float num) {
-    int inum = (int)num;
-    if (num == (float)inum) {
-        return inum;
-    }
-    return inum + 1;
-}
+// int ceil(float num) {
+//     int inum = (int)num;
+//     if (num == (float)inum) {
+//         return inum;
+//     }
+//     return inum + 1;
+// }
 
 int round_up(int num, int mult) {
     int r =  num % mult;
