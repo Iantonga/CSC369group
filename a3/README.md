@@ -19,4 +19,6 @@ Quesitons:
         ans: it's because of the integer division int he for loop!
 
 
-    6. Number of links after mkdir is 2 because of the '.' and parent/new_dir 
+    6. Number of links after mkdir is 2 because of the '.' and parent/new_dir
+
+    7. Check that the file name is not more than 255 (since the char field)

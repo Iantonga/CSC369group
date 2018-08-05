@@ -1,131 +1,13 @@
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <string.h> /* Added this for strncpy*/
-#include <getopt.h> /* For getting the required arguments*/
-#include <libgen.h> /* For basename*/
+
 #include <assert.h>
 #include <errno.h>
 #include <time.h> /* For timestamp */
-#include <string.h> /* For memset */
-#include "ext2.h"
+#include "ext2_util.h"
 
-unsigned char *disk;
-
-
-int round_up(int num, int mult) {
-    int r =  num % mult;
-    if (!r) {
-        return num;
-    }
-    return (num + mult) - r;
-}
-
-
-// WARNING: This is a reptitive code!!!!!!!!!
-int get_inode_from_path(char *abs_path, int print_file) {
-    /* NOTE(strtok): need to copy abs_path to an array since they said there is a bug
-    if we use const it gets rid of the last '/'*/
-    char path[strlen(abs_path) + 1];
-    path[strlen(abs_path)] = '\0';
-    strncpy(path, abs_path, strlen(abs_path));
-
-
-    // WARNING DUPLICATED
-    struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
-    unsigned int i_tbl_location = gd->bg_inode_table;
-    struct ext2_inode *inodes = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
-
-
-    /* We assume that path start at '/'. we subtract 1 since inode starts
-    at 1 instead of 0. */
-    int inode_ind = EXT2_ROOT_INO - 1;
-
-    char *token = NULL;
-    token = strtok(path, "/");
-    while( token != NULL ) {
-        // printf( "token: %s\n", token);
-        int isfound = 0;
-        if (inodes[inode_ind].i_mode & EXT2_S_IFDIR) {
-            for (int b = 0; b < 15 && !isfound; b++) {
-                if (b < 12) {
-                    if (inodes[inode_ind].i_block[b]) {
-                        struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + inodes[inode_ind].i_block[b] * EXT2_BLOCK_SIZE);
-                        int curr_entry = 0;
-
-                        while (curr_entry < EXT2_BLOCK_SIZE) {
-                            int size = (int) de->name_len;
-                            char tmp_name[size + 1];
-                            tmp_name[size] = '\0';
-                            strncpy(tmp_name, de->name, size);
-                            // printf("%d %s\n", de->inode, tmp_name);
-                            if (!strncmp(token, tmp_name, strlen(token)) && strlen(token) == size) {
-                                isfound = 1;
-                                inode_ind = de->inode - 1;
-                                if (de->file_type != EXT2_FT_DIR) {
-                                    char *substr = strstr(abs_path, token);
-                                    int pos = substr - abs_path;
-                                    if (abs_path[pos + size] == '/') {
-                                        return -1;
-                                    }
-                                    if (print_file) {
-                                        printf("%s\n", tmp_name);
-                                    }
-                                }
-                                break;
-                            }
-                            curr_entry += de->rec_len;
-                            de = (void *)de + de->rec_len;
-                        }
-                        if (!isfound) {
-
-                            return -ENOENT;
-                        }
-                    }
-                } else if (b == 12) {
-                    // TODO: Implement this
-                } else {
-                    // TODO: Implement this
-                }
-            }
-
-        } else {
-
-            return -ENOENT;
-
-        }
-
-        token = strtok(NULL, "/");
-   }
-
-   return inode_ind;
-}
-
-/* Having a copy of the bitmap is better to work with*/
-int get_free_bitmap2(struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char bitmap_ptr[], unsigned int count) {
-
-    int pos = 0;
-    while (pos < count) {
-        int bit_map_byte = pos / 8;
-        int bit_pos = pos % 8;
-        if ((bitmap_ptr[bit_map_byte] >> bit_pos) & 1) {
-            pos ++;
-        } else {
-            char found_bit = 1 << bit_pos;
-            bitmap_ptr[bit_map_byte] |= found_bit;
-            return pos;
-        }
-    }
-    return -1;
-
-}
-
-
-
+/*
+Return -1 to indicate EEXIST
+Return -2 to indicate ENOENT
+*/
 int get_parent_ino(char *path, char **dir_name) {
     if ((*dir_name = basename(path)) == NULL) {
         perror("basename");
@@ -133,10 +15,10 @@ int get_parent_ino(char *path, char **dir_name) {
     }
 
     int status, index;
-    if ((status = get_inode_from_path(path, 0)) >= 0) {
-        return -EEXIST;
-    } else if (status == -1) {
+    if ((status = get_inode_from_path(path, NO)) >= 0) {
         return -1;
+    } else if (status == -1) {
+        return -2;
     }
 
     char *parent_path;
@@ -145,8 +27,8 @@ int get_parent_ino(char *path, char **dir_name) {
         exit(1);
     }
 
-    if ((index = get_inode_from_path(parent_path, 0)) < 0) {
-        return -1;
+    if ((index = get_inode_from_path(parent_path, NO)) < 0) {
+        return -2;
     }
 
     return index;
@@ -155,7 +37,7 @@ int get_parent_ino(char *path, char **dir_name) {
 
 int create_inode_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char blk_map_ptr[]) {
     int pos;
-    if (( pos = get_free_bitmap2(sb, gd, ib_ptr, sb->s_inodes_count)) < 0) {
+    if (( pos = get_free_bitmap(sb, gd, ib_ptr, sb->s_inodes_count)) < 0) {
         return -1;
     }
     sb->s_free_inodes_count --;
@@ -189,7 +71,7 @@ int create_inode_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, struct
 
 int create_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, unsigned char *bb_ptr, int par_i, int new_i, struct ext2_super_block *sb, struct ext2_group_desc *gd, unsigned char blk_map_ptr[], char *name) {
     int free_blk_ind;
-    if ((free_blk_ind = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count)) < 0) {
+    if ((free_blk_ind = get_free_bitmap(sb, gd, blk_map_ptr, sb->s_blocks_count)) < 0) {
         return -1;
     }
     sb->s_free_blocks_count --;
@@ -268,7 +150,7 @@ int create_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, unsigned cha
                 }
             } else {
                 int free_bb_pos;
-                if (( free_bb_pos = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count)) < 0) {
+                if (( free_bb_pos = get_free_bitmap(sb, gd, blk_map_ptr, sb->s_blocks_count)) < 0) {
                     return -ENOSPC;
                 }
                 sb->s_free_blocks_count --;
@@ -333,24 +215,15 @@ int main(int argc, char **argv) {
     	exit(1);
     }
 
-
-
-    struct ext2_super_block *sb = (struct ext2_super_block *)(disk + EXT2_BLOCK_SIZE);
-    struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
-    int bitmap_block_location = gd->bg_block_bitmap;
-    unsigned char *bb_ptr = disk + EXT2_BLOCK_SIZE * bitmap_block_location;
-    int bitmap_inode_location = gd->bg_inode_bitmap;
-    unsigned char *ib_ptr = disk + EXT2_BLOCK_SIZE * bitmap_inode_location;
-    unsigned int i_tbl_location = gd->bg_inode_table;
-    struct ext2_inode *inode_tbl = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
+    init_block_pointrs();
 
     char *dir_name = NULL;
     int par_inode_ind = get_parent_ino(abs_path, &dir_name);
-    if (par_inode_ind == -EEXIST) {
+    if (par_inode_ind == -1) {
         fprintf(stderr, "%s already exist!\n", dir_name);
         return EEXIST;
-    } else if (par_inode_ind == -1) {
-        fprintf(stderr, "Not directory\n");
+    } else if (par_inode_ind == -2) {
+        fprintf(stderr, "Not a directory!\n");
         return ENOENT;
     }
 
