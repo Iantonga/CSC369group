@@ -158,7 +158,8 @@ int create_inode_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, struct
     if (( pos = get_free_bitmap2(sb, gd, ib_ptr, sb->s_inodes_count)) < 0) {
         return -1;
     }
-    sb->s_inodes_count --;
+    sb->s_free_inodes_count --;
+    gd->bg_free_inodes_count -- ;
 
     memset(&inode_tbl[pos], 0, sizeof(inode_tbl[pos]));
     inode_tbl[pos].i_mode |= 0x4000;
@@ -169,12 +170,17 @@ int create_inode_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, struct
     inode_tbl[pos].i_mtime = (unsigned int)time(NULL);
     inode_tbl[pos].i_size = EXT2_BLOCK_SIZE;
     inode_tbl[pos].i_blocks = 2;
+    inode_tbl[pos].i_links_count = 2;
+
 
     /*1. update _dirs
         1.1) used_dirs: N
         2.2) free inodes: N
         2.3) free blocks: N
         2.4) links (for root): N*/
+
+    // WARNING: sb and gd should be updated after
+    gd->bg_used_dirs_count ++;
 
 
     return pos;
@@ -186,12 +192,14 @@ int create_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, unsigned cha
     if ((free_blk_ind = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count)) < 0) {
         return -1;
     }
-    sb->s_blocks_count --;
+    sb->s_free_blocks_count --;
+    gd->bg_free_blocks_count --;
 
     inode_tbl[new_i].i_block[0] = free_blk_ind + 1;
     struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + inode_tbl[new_i].i_block[0] * EXT2_BLOCK_SIZE);
     int metadata_size = sizeof(unsigned int) + sizeof(short) + sizeof(char) * 2 + strlen(".");
     metadata_size = round_up(metadata_size, 4);
+    int me_dot = metadata_size;
     de->inode = new_i + 1;
     de->rec_len = metadata_size;
     de->name_len = strlen(".");
@@ -202,12 +210,12 @@ int create_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, unsigned cha
 
     metadata_size = sizeof(unsigned int) + sizeof(short) + sizeof(char) * 2 + strlen("..");
     metadata_size = round_up(metadata_size, 4);
-    if (par_i == 1) {
-        inode_tbl[par_i].i_links_count ++;
-    }
+
+    inode_tbl[par_i].i_links_count ++;
+
     de->inode = par_i + 1;
-    de->rec_len = metadata_size;
-    de->name_len = strlen(".");
+    de->rec_len = EXT2_BLOCK_SIZE - me_dot;
+    de->name_len = strlen("..");
     de->file_type = EXT2_FT_DIR;
     strncpy(de->name, "..", strlen(".."));
 
@@ -242,7 +250,7 @@ int create_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, unsigned cha
                             curr_de = (void *)curr_de + metadata_size;
                             curr_de->inode = new_i + 1;
                             curr_de->rec_len = prev_de->rec_len - metadata_size;
-                            curr_de->name_len = strlen(name);
+                            curr_de->name_len = (unsigned char)strlen(name);
                             curr_de->file_type = EXT2_FT_DIR;
                             strncpy(curr_de->name, name, strlen(name));
                             printf("inode %d rec %d name_len %d file_typ %d name %s\n", curr_de->inode,curr_de->rec_len,curr_de->name_len, curr_de->file_type, curr_de->name);
@@ -263,7 +271,8 @@ int create_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, unsigned cha
                 if (( free_bb_pos = get_free_bitmap2(sb, gd, blk_map_ptr, sb->s_blocks_count)) < 0) {
                     return -ENOSPC;
                 }
-                sb->s_blocks_count --;
+                sb->s_free_blocks_count --;
+                gd->bg_free_blocks_count --;
                 inode_tbl[par_i].i_block[j] = free_bb_pos + 1;
 
                 curr_de->inode = new_i + 1;
