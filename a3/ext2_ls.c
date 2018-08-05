@@ -10,6 +10,7 @@
 #include <errno.h>
 #include "ext2.h"
 
+ // TODO: ./ext2_ls images/emptydisk.img /lost+found -a
 
 unsigned char *disk;
 
@@ -55,8 +56,8 @@ int get_inode_from_path(char *abs_path, int print_file) {
                                     char *substr = strstr(abs_path, token);
                                     int pos = substr - abs_path;
                                     if (abs_path[pos + size] == '/') {
-                                        fprintf(stderr, "No such file or directory\n");
-                                        return -ENOENT;
+
+                                        return -1;
                                     }
                                     if (print_file) {
                                         printf("%s\n", tmp_name);
@@ -68,7 +69,6 @@ int get_inode_from_path(char *abs_path, int print_file) {
                             de = (void *)de + de->rec_len;
                         }
                         if (!isfound) {
-                            fprintf(stderr, "No such file or directory\n");
                             return -ENOENT;
                         }
                     }
@@ -80,8 +80,7 @@ int get_inode_from_path(char *abs_path, int print_file) {
             }
 
         } else {
-            fprintf(stderr, "No such file or directory\n");
-            return ENOENT;
+            return -ENOENT;
 
         }
 
@@ -185,6 +184,7 @@ int main(int argc, char **argv) {
 
     int inode_index = get_inode_from_path(abs_path, 1);
     if (inode_index < 0) {
+        fprintf(stderr, "No such file or directory\n");
         return ENOENT;
     }
 
@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
                if (it[inode_index].i_block[j]) {
                    struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + it[inode_index].i_block[j] * EXT2_BLOCK_SIZE);
                    int curr_entry = 0;
-                   if (!aflag) {
+                   if (!aflag && j == 0) {
                        /* Skip .*/
                        curr_entry += de->rec_len;
                        de = (void *)de + de->rec_len;
@@ -218,13 +218,16 @@ int main(int argc, char **argv) {
                        char tmp_name[(int) de->name_len];
                        memset(tmp_name, 0, de->name_len + 1);
                        strncpy(tmp_name, de->name, de->name_len);
-                       if (de->file_type == EXT2_FT_DIR) {
-                           printf("%s/\n", tmp_name);
-                       } else {
-                           printf("%s\n", tmp_name);
+                       if (de->name_len != 0) {
+                           if (de->file_type == EXT2_FT_DIR) {
+                               printf("%s/\n", tmp_name);
+                           } else {
+                               printf("%s\n", tmp_name);
+                           }
                        }
                        curr_entry += de->rec_len;
                        de = (void *)de + de->rec_len;
+
                    }
                }
            } else {

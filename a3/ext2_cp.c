@@ -42,6 +42,7 @@ int get_inode_from_path(char *abs_path, int print_file) {
     strncpy(path, abs_path, strlen(abs_path));
 
 
+    // WARNING DUPLICATED
     struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
     unsigned int i_tbl_location = gd->bg_inode_table;
     struct ext2_inode *inodes = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
@@ -76,7 +77,7 @@ int get_inode_from_path(char *abs_path, int print_file) {
                                     char *substr = strstr(abs_path, token);
                                     int pos = substr - abs_path;
                                     if (abs_path[pos + size] == '/') {
-                                        fprintf(stderr, "No such file or directory\n");
+
                                         return -ENOENT;
                                     }
                                     if (print_file) {
@@ -89,7 +90,7 @@ int get_inode_from_path(char *abs_path, int print_file) {
                             de = (void *)de + de->rec_len;
                         }
                         if (!isfound) {
-                            fprintf(stderr, "No such file or directory\n");
+
                             return -ENOENT;
                         }
                     }
@@ -101,8 +102,8 @@ int get_inode_from_path(char *abs_path, int print_file) {
             }
 
         } else {
-            fprintf(stderr, "No such file or directory\n");
-            return ENOENT;
+
+            return -ENOENT;
 
         }
 
@@ -242,6 +243,7 @@ int create_inode(int pos, struct ext2_inode *inode_tbl, unsigned char *ib_ptr, F
     inode_tbl[pos].i_blocks = my_ceil(size / (EXT2_BLOCK_SIZE / 2.0));
     inode_tbl[pos].i_links_count = 1;
 
+    // WARNING: This should be after directory entry!!!
     gd->bg_free_inodes_count -= 1;
     sb->s_free_inodes_count -= 1;
 
@@ -298,17 +300,20 @@ int main(int argc, char **argv) {
 
     parse_cmd(argc, argv, &img_name, &os_path, &ext2_path);
 
+    // WARNING: replace argv[1] with img_name.
     int fd = open(argv[1], O_RDWR);
     if (fd == -1) {
         perror("open");
         exit(1);
     }
+
     disk = mmap(NULL, 128 * 1024, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if(disk == MAP_FAILED) {
     	perror("mmap");
     	exit(1);
     }
 
+    // WARNING: Also use lstat to check if the fsrc is a file or a directory!!!
     // Opening the source file that it'll be copied
     if((fsrc = fopen(os_path, "rb")) == NULL) {
         perror("fopen");
@@ -335,6 +340,7 @@ int main(int argc, char **argv) {
     // Get the inode index of the path specified!
     int inode_index = get_inode_from_path(ext2_path, 0);
     if (inode_index < 0) {
+        fprintf(stderr, "No such file or directory\n");
         return ENOENT;
     }
 
@@ -381,6 +387,7 @@ int main(int argc, char **argv) {
                                 curr_de->rec_len = prev_de->rec_len - metadata_size;
                                 curr_de->name_len = strlen(fsrc_name);
                                 curr_de->file_type = EXT2_FT_REG_FILE;
+                                strncpy(curr_de->name, fsrc_name, strlen(fsrc_name));
                                 prev_de->rec_len = metadata_size;
 
                             } else {
@@ -409,7 +416,7 @@ int main(int argc, char **argv) {
                     if (( free_bb_pos = get_free_bitmap2(sb, gd, bb_ptr, sb->s_blocks_count)) < 0) {
                         return ENOSPC;
                     }
-                    inode_tbl[inode_index].i_block[j] = free_bb_pos;
+                    inode_tbl[inode_index].i_block[j] = free_bb_pos + 1;
 
                     curr_de->inode = free_ib_pos + 1;
                     curr_de->rec_len = EXT2_BLOCK_SIZE;
@@ -423,7 +430,7 @@ int main(int argc, char **argv) {
         }
     } else if (inode_tbl[inode_index].i_mode & EXT2_S_IFREG){
         // we overwrite
-
+        // TODO: README.md
         // Set the block of the file that is being overwritten to 0.
         for (int i = 0; i < 15; i++) {
             int bit_map_byte =  inode_tbl[inode_index].i_block[i] / 8;
@@ -435,7 +442,7 @@ int main(int argc, char **argv) {
 
         int size = copy_file(fsrc, &inode_tbl[inode_index], sb, gd, block_bitmap_copy);
         if (size < 0) {
-            return -ENOSPC;
+            return ENOSPC;
         }
         inode_tbl[inode_index].i_size = size;
 

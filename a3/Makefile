@@ -1,10 +1,14 @@
 # FLAGS = -Wall -g -std=gnu99
 FLAGS = -Wall
 DEPENDENCIES = ext2.h
-EXEC = ext2_ls ext2_cp
-# EXEC = ext2_ls.o ext2_cp.o
+EXEC = ext2_ls ext2_cp ext2_mkdir
 
 all : $(EXEC)
+
+# =============================
+# ext2_ls : ext2_ls.o helper.o
+# 	gcc $(FLAGS) -o $@ $^
+# =============================
 
 ext2_ls : ext2_ls.c $(DEPENDENCIES)
 	gcc $(FLAGS) -o $@ $<
@@ -12,9 +16,9 @@ ext2_ls : ext2_ls.c $(DEPENDENCIES)
 ext2_cp : ext2_cp.c $(DEPENDENCIES)
 	gcc $(FLAGS) -o $@ $<
 
-# ext2_mkdir : ext2_mkdir.c $(DEPENDENCIES)
-# 	gcc $(FLAGS) -o $@ $<
-#
+ext2_mkdir : ext2_mkdir.c $(DEPENDENCIES)
+	gcc $(FLAGS) -o $@ $<
+
 # ext2_ln : ext2_ln.c $(DEPENDENCIES)
 # 	gcc $(FLAGS) -o $@ $<
 #

@@ -30,6 +30,7 @@ int main(int argc, char **argv) {
     struct ext2_super_block *sb = (struct ext2_super_block *)(disk + 1024);
     printf("Inodes: %d\n", sb->s_inodes_count);
     printf("Blocks: %d\n", sb->s_blocks_count);
+    printf("Inodes per group: %d\n", sb->s_inodes_per_group);
 
     /* Task 1*/
     struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
@@ -113,6 +114,7 @@ int main(int argc, char **argv) {
 
                         // single indirect pointer
                     } else if (ptr_i == 12 ) {
+                        printf(" %d", it[i].i_block[ptr_i]);
                         printf("\n\t");
                         printf("  Single indirect blocks: ");
                         unsigned int *s_indir = (unsigned int *)(disk + it[i].i_block[ptr_i] * EXT2_BLOCK_SIZE);
