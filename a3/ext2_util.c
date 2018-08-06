@@ -167,3 +167,13 @@ int get_inode_from_path(char *abs_path, int print_file) {
 
    return inode_ind;
 }
+
+
+/**/
+char * concat_to_path(char *link_path, char *fname_src) {
+    int size = strlen(link_path) + 1 + strlen(fname_src) + 1;
+    char result[size];
+    sprintf(result, "%s/%s", link_path, fname_src);
+    result[size] = '\0';
+    return result;
+}

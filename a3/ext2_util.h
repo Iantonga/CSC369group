@@ -17,6 +17,8 @@
 // =============================== Macros ==================================
 #define NO 0
 #define YES 1
+#define FALSE 0
+#define TRUE 1
 
 
 // ======================= Frequently Used Variables =======================

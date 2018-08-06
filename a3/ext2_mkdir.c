@@ -198,7 +198,6 @@ void parse_cmd(int argc, char **argv, char **img, char **path) {
 
 
 int main(int argc, char **argv) {
-    char *img_name;
     char *abs_path;
 
     parse_cmd(argc, argv, &img_name, &abs_path);
