@@ -1,94 +1,46 @@
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <string.h> /* Added this for strncpy*/
 #include <getopt.h> /* For getting the required arguments*/
-#include <errno.h>
-#include "ext2.h"
-
- // TODO: ./ext2_ls images/emptydisk.img /lost+found -a
-
-unsigned char *disk;
-
-int get_inode_from_path(char *abs_path, int print_file) {
-    /* NOTE(strtok): need to copy abs_path to an array since they said there is a bug
-    if we use const it gets rid of the last '/'*/
-    char path[strlen(abs_path) + 1];
-    path[strlen(abs_path)] = '\0';
-    strncpy(path, abs_path, strlen(abs_path));
+#include "ext2_util.h"
 
 
-    struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
-    unsigned int i_tbl_location = gd->bg_inode_table;
-    struct ext2_inode *inodes = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
+/*
+List entries of directory that begin at the jth
+block pointer of that directory's corresponding inode.
+block_num is the block where the data begins, and
+aflag indicates whether to list the current directory
+and the parent directory (. and ..) in addition to the entries.
+*/
+void list_entries(int block_num, int j, int aflag){
+    struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk +
+        block_num * EXT2_BLOCK_SIZE);
 
+    int curr_entry = 0;
 
-    /* We assume that path start at '/'. we subtract 1 since inode starts
-    at 1 instead of 0. */
-    int inode_ind = EXT2_ROOT_INO - 1;
+    // if the aflag is used then don't skip the first block with . and ..
+    if (!aflag && j == 0) {
+        curr_entry += de->rec_len;
+        de = (void *)de + de->rec_len;
 
-    char *token = NULL;
-    token = strtok(path, "/");
-    while( token != NULL ) {
-        // printf( "token: %s\n", token);
-        int isfound = 0;
-        if (inodes[inode_ind].i_mode & EXT2_S_IFDIR) {
-            for (int b = 0; b < 15 && !isfound; b++) {
-                if (b < 12) {
-                    if (inodes[inode_ind].i_block[b]) {
-                        struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + inodes[inode_ind].i_block[b] * EXT2_BLOCK_SIZE);
-                        int curr_entry = 0;
+        curr_entry += de->rec_len;
+        de = (void *)de + de->rec_len;
+    }
 
-                        while (curr_entry < EXT2_BLOCK_SIZE) {
-                            int size = (int) de->name_len;
-                            char tmp_name[size + 1];
-                            tmp_name[size] = '\0';
-                            strncpy(tmp_name, de->name, size);
-                            // printf("%d %s\n", de->inode, tmp_name);
-                            if (!strncmp(token, tmp_name, strlen(token)) && strlen(token) == size) {
-                                isfound = 1;
-                                inode_ind = de->inode - 1;
-                                if (de->file_type != EXT2_FT_DIR) {
-                                    char *substr = strstr(abs_path, token);
-                                    int pos = substr - abs_path;
-                                    if (abs_path[pos + size] == '/') {
-
-                                        return -1;
-                                    }
-                                    if (print_file) {
-                                        printf("%s\n", tmp_name);
-                                    }
-                                }
-                                break;
-                            }
-                            curr_entry += de->rec_len;
-                            de = (void *)de + de->rec_len;
-                        }
-                        if (!isfound) {
-                            return -ENOENT;
-                        }
-                    }
-                } else if (b == 13) {
-                    // TODO: Implement this
-                } else if (b == 14) {
-                    // TODO: Implement this
-                }
+    while (curr_entry < EXT2_BLOCK_SIZE) {
+        char tmp_name[(int) de->name_len];
+        memset(tmp_name, 0, de->name_len + 1);
+        strncpy(tmp_name, de->name, de->name_len);
+        if (de->name_len != 0) {
+            if (de->file_type == EXT2_FT_DIR) {
+                printf("%s/\n", tmp_name);
+            } else {
+                printf("%s\n", tmp_name);
             }
-
-        } else {
-            return -ENOENT;
-
         }
+        curr_entry += de->rec_len;
+        de = (void *)de + de->rec_len;
 
-        token = strtok(NULL, "/");
-   }
-
-   return inode_ind;
+    }
 }
+
 
 
 /*
@@ -169,7 +121,7 @@ void parse_cmd(int argc, char **argv, int *flag_a, char **img, char **path) {
 
 int main(int argc, char **argv) {
     int aflag = 0;
-    char *img_name = NULL;
+    img_name = NULL;
     char *abs_path = NULL;
 
     parse_cmd(argc, argv, &aflag, &img_name, &abs_path);
@@ -182,60 +134,33 @@ int main(int argc, char **argv) {
     	exit(1);
     }
 
-    int inode_index = get_inode_from_path(abs_path, 1);
+    init_block_pointrs();
+
+    int inode_index = get_inode_from_path(abs_path, YES);
     if (inode_index < 0) {
         fprintf(stderr, "No such file or directory\n");
         return ENOENT;
     }
 
 
-   struct ext2_group_desc *gd = (struct ext2_group_desc *)(disk + EXT2_BLOCK_SIZE * 2);
-   unsigned int i_tbl_location = gd->bg_inode_table;
-   struct ext2_inode *it = (struct ext2_inode *)(disk + EXT2_BLOCK_SIZE * i_tbl_location);
-
-
-   /* If the path lead to it[i] is either directory then list the contents of
-   that directory o.w. just list that sing file.*/
-   if (it[inode_index].i_mode & EXT2_S_IFDIR) {
+   /* If the path leads to it[i] is either directory then list the contents of
+   that directory o.w. just list that.*/
+   if (inode_tbl[inode_index].i_mode & EXT2_S_IFDIR) {
        for (int j = 0; j < 15; j++) {
            if (j < 12) {
-               if (it[inode_index].i_block[j]) {
-                   struct ext2_dir_entry_2 *de = (struct ext2_dir_entry_2 *)(disk + it[inode_index].i_block[j] * EXT2_BLOCK_SIZE);
-                   int curr_entry = 0;
-                   if (!aflag && j == 0) {
-                       /* Skip .*/
-                       curr_entry += de->rec_len;
-                       de = (void *)de + de->rec_len;
-
-                       /* Skip ..*/
-                       curr_entry += de->rec_len;
-                       de = (void *)de + de->rec_len;
-                   }
-
-                   while (curr_entry < EXT2_BLOCK_SIZE) {
-                       // printf("curr_entry: %d\n", curr_entry);
-                       // printf("curr_entry += rec: %d\n", curr_entry + de->rec_len);
-                       char tmp_name[(int) de->name_len];
-                       memset(tmp_name, 0, de->name_len + 1);
-                       strncpy(tmp_name, de->name, de->name_len);
-                       if (de->name_len != 0) {
-                           if (de->file_type == EXT2_FT_DIR) {
-                               printf("%s/\n", tmp_name);
-                           } else {
-                               printf("%s\n", tmp_name);
-                           }
-                       }
-                       curr_entry += de->rec_len;
-                       de = (void *)de + de->rec_len;
-
+               if (inode_tbl[inode_index].i_block[j]) {
+                   list_entries(inode_tbl[inode_index].i_block[j], j, aflag);
+               }
+           } else if (j == 12) {
+               unsigned int *s_indir = (unsigned int *)(disk +
+                   inode_tbl[inode_index].i_block[j] * EXT2_BLOCK_SIZE);
+                for (int s = 0; s < (EXT2_BLOCK_SIZE / sizeof(unsigned)); s++) {
+                   if (s_indir[s]) {
+                       list_entries(s_indir[s], j, aflag);
                    }
                }
-           } else {
-               // TODO: Implement the other ones
            }
        }
-   } else {
-       // TODO: print the file only
    }
 
     return 0;

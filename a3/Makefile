@@ -5,8 +5,8 @@ EXEC = ext2_ls ext2_cp ext2_mkdir ext2_ln ext2_rm
 
 all : $(EXEC)
 
-ext2_ls : ext2_ls.c $(DEPENDENCIES)
-	gcc $(FLAGS) -o $@ $<
+ext2_ls : ext2_ls.o ext2_util.o
+	gcc $(FLAGS) -o $@ $^
 
 ext2_cp : ext2_cp.c $(DEPENDENCIES)
 	gcc $(FLAGS) -o $@ $<

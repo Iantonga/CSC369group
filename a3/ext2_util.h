@@ -9,7 +9,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <getopt.h> /* For getting the required cmd line flags*/ //TODO: remove this
+#include <errno.h>
 #include <string.h> /* useful tools*/
 #include <libgen.h> /* For basename and dirname*/
 
