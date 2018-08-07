@@ -22,6 +22,15 @@ int round_up(unsigned num, unsigned mult) {
 }
 
 
+int my_ceil(float num) {
+    int inum = (int)num;
+    if (num == (float)inum) {
+        return inum;
+    }
+    return inum + 1;
+}
+
+
 int get_free_bitmap(struct ext2_super_block *sb, struct ext2_group_desc *gd,
     unsigned char bitmap_ptr[], unsigned int count) {
 
@@ -132,7 +141,7 @@ int get_inode_from_path(char *abs_path, int print_file) {
                     }
                 } else if (b == 12) { // Single indirect pointer: i_block[12]
                     // TODO: delete the print statement here
-                    printf("checking entries in single indirect\n");
+                    // printf("checking entries in single indirect\n");
                     unsigned int *s_indir = (unsigned int *)(disk +
                         inode_tbl[inode_ind].i_block[b] * EXT2_BLOCK_SIZE);
                         for (int s = 0; s < (EXT2_BLOCK_SIZE / sizeof(unsigned)) && !isfound; s++) {
@@ -170,9 +179,9 @@ int get_inode_from_path(char *abs_path, int print_file) {
 
 
 /**/
-char * concat_to_path(char *link_path, char *fname_src) {
+char *concat_to_path(char *link_path, char *fname_src) {
     int size = strlen(link_path) + 1 + strlen(fname_src) + 1;
-    char result[size];
+    char *result = (void *)malloc(size * sizeof(char));
     sprintf(result, "%s/%s", link_path, fname_src);
     result[size] = '\0';
     return result;

@@ -381,10 +381,11 @@ int main(int argc, char **argv) {
                         if ( remaining_bytes >= newf_metadata_size) {
                             // If it is marked as deleted
                             // WARNING: repetitive
+                            // TODO: the deletion should be checked first! refer to ext2_ln.c
                             if (inode_tbl[curr_de->inode].i_dtime) {
                                 prev_de = curr_de;
                                 curr_de->inode = free_ib_pos + 1;
-                                curr_de->rec_len = prev_de->rec_len - metadata_size;
+                                curr_de->rec_len = prev_de->rec_len - metadata_size; //WARNING
                                 curr_de->name_len = strlen(fsrc_name);
                                 curr_de->file_type = EXT2_FT_REG_FILE;
                                 strncpy(curr_de->name, fsrc_name, strlen(fsrc_name));

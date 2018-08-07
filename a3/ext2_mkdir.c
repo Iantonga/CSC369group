@@ -44,7 +44,7 @@ int create_inode_dir(struct ext2_inode *inode_tbl, unsigned char *ib_ptr, struct
     gd->bg_free_inodes_count -- ;
 
     memset(&inode_tbl[pos], 0, sizeof(inode_tbl[pos]));
-    inode_tbl[pos].i_mode |= 0x4000;
+    inode_tbl[pos].i_mode |= EXT2_S_IFDIR;
     // inode_tbl[pos].i_mode |= 0x002;
     // inode_tbl[pos].i_mode |= 0x004;
     inode_tbl[pos].i_atime = (unsigned int)time(NULL);

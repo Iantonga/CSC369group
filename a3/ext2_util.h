@@ -9,10 +9,9 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <string.h> /* For memset */
-#include <libgen.h> /* For basename and dirname*/
 #include <getopt.h> /* For getting the required cmd line flags*/ //TODO: remove this
 #include <string.h> /* useful tools*/
+#include <libgen.h> /* For basename and dirname*/
 
 // =============================== Macros ==================================
 #define NO 0
@@ -66,5 +65,8 @@ int check_entries_for_path(unsigned block_num, char *token, int print_file,
    is a file o.w. do nothing (this is used for ext2_ls)*/
 int get_inode_from_path(char *abs_path, int print_file);
 
+char *concat_to_path(char *, char *);
+
+int my_ceil(float);
 
 #endif
