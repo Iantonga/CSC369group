@@ -53,6 +53,16 @@ int get_free_bitmap(struct ext2_super_block *sb, struct ext2_group_desc *gd,
 
 }
 
+void set_free_bitmap(int i, unsigned char bitmap_ptr[]) {
+    int bit_map_byte = i / 8;
+    int bit_pos = i % 8;
+    char tmp = ~(1 << (bit_pos));
+    bitmap_ptr[bit_map_byte] &= tmp;
+    // int bit_map_byte = i / 8;
+    // int bit_pos = i % 8;
+    // bitmap_ptr[bit_map_byte] = (bitmap_ptr[bit_map_byte] >> bit_pos) & 0;
+}
+
 
 /* Return whether there is a directory entry in this block number block_num
   for the given token. If print_file is YES print the file (if found any).

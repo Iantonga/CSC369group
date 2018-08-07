@@ -51,6 +51,8 @@ int round_up(unsigned num, unsigned mult);
 int get_free_bitmap(struct ext2_super_block *, struct ext2_group_desc *,
     unsigned char bitmap_ptr[], unsigned int count);
 
+void set_free_bitmap(int i, unsigned char bitmap_ptr[]);
+
 
 /* Return whether there is a directory entry in this block number block_num
   for the given token. If print_file is YES print the file (if found any).

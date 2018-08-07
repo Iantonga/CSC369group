@@ -431,7 +431,7 @@ int main(int argc, char **argv) {
         }
     } else if (inode_tbl[inode_index].i_mode & EXT2_S_IFREG){
         // we overwrite
-        // TODO: README.md
+        // TODO: README.md also the setting the byte to 0 might be wrong
         // Set the block of the file that is being overwritten to 0.
         for (int i = 0; i < 15; i++) {
             int bit_map_byte =  inode_tbl[inode_index].i_block[i] / 8;
