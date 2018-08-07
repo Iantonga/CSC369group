@@ -141,6 +141,7 @@ void remove_file(char *path, int rflag, int parent_i,
         } else { // This is a file!
             printf("lol2\n");
             inode_tbl[inode_i].i_dtime = (unsigned int)time(NULL);
+            inode_tbl[inode_i].i_links_count --;
             delete_entry(inode_i, parent_i);
             for (int b = 0; b < 15; b++){
                 if (inode_tbl[inode_i].i_block[b]) {
