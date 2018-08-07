@@ -261,28 +261,24 @@ void create_entry(int inode_src, int inode_dest, int sflag, char *path, char *fn
 
 
 int put_path_to_blocks(int pos, char *path, unsigned char blk_map_ptr[]) {
-    unsigned char *block_ptr;
     int path_size = strlen(path);
-    int new_pos = get_free_bitmap(sb, gd, blk_map_ptr, sb->s_blocks_count);
-    if (new_pos < 0) {
-        return -1;
-    }
-    block_ptr = disk + EXT2_BLOCK_SIZE * (new_pos + 1);
+    printf("%s\n", path);
 
-    if (path_size > EXT2_BLOCK_SIZE) {
-        fprintf(stderr, "Too long ;)!\n");
+    if (path_size > 15 * sizeof(unsigned)) {
+        fprintf(stderr, "Too long )!\n");
         exit(ENAMETOOLONG);
     }
-    strncpy((char *) block_ptr, path, path_size);
+    strncpy((char *) inode_tbl[pos].i_block, path, path_size);
 
     return 0;
 }
 
 int create_soft_inode(unsigned char blk_map_ptr[], unsigned char inode_map_ptr[], char *path) {
     int pos;
-    if (( pos = get_free_bitmap(sb, gd, ib_ptr, sb->s_inodes_count)) < 0) {
+    if (( pos = get_free_bitmap(sb, gd, inode_map_ptr, sb->s_inodes_count)) < 0) {
         return -1;
     }
+
     sb->s_free_inodes_count --;
     gd->bg_free_inodes_count -- ;
 
@@ -297,18 +293,8 @@ int create_soft_inode(unsigned char blk_map_ptr[], unsigned char inode_map_ptr[]
         return -1;
     }
     inode_tbl[pos].i_size = strlen(path);
-    inode_tbl[pos].i_blocks = my_ceil(inode_tbl[pos].i_size / 512);
-    inode_tbl[pos].i_links_count = 2;
+    inode_tbl[pos].i_links_count = 1;
 
-
-    /*1. update _dirs
-        1.1) used_dirs: N
-        2.2) free inodes: N
-        2.3) free blocks: N
-        2.4) links (for root): N*/
-
-    // WARNING: sb and gd should be updated after
-    gd->bg_used_dirs_count ++;
 
 
     return pos;
@@ -325,20 +311,30 @@ int make_link(int inode_src, int inode_dest, int sflag, char *path, char *fname)
 
     } else {
         unsigned char block_bitmap_copy[sb->s_blocks_count / 8];
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < sb->s_blocks_count / 8; i++) {
             block_bitmap_copy[i] = bb_ptr[i];
         }
 
+
         unsigned char inode_bitmap_copy[sb->s_inodes_count / 8];
-        for (int i = 0; i < 4; i++) {
-            block_bitmap_copy[i] = ib_ptr[i];
+        for (int i = 0; i < sb->s_inodes_count / 8; i++) {
+            inode_bitmap_copy[i] = ib_ptr[i];
         }
         int pos;
         if ((pos = create_soft_inode(block_bitmap_copy, inode_bitmap_copy, path)) == -1) {
             return -1;
         }
         create_entry(pos, inode_dest, sflag, path, fname);
-        // SET THE ib_ptr and bb_ptr to the actual bits
+        // TODO: SET THE ib_ptr and bb_ptr to the actual bits
+        // Update the bb_ptr;
+        for (int i = 0; i < 16; i ++) {
+            bb_ptr[i] = block_bitmap_copy[i];
+        }
+        // Update the bb_ptr;
+        for (int i = 0; i < 16; i ++) {
+            ib_ptr[i] = inode_bitmap_copy[i];
+        }
+
     }
     return 0;
 }
@@ -377,7 +373,7 @@ int main(int argc, char **argv) {
         return EEXIST;
     }
     printf("%s\n", link_name);
-    make_link(inode_src, inode_dest, sflag, link_abs_path, link_name);
+    make_link(inode_src, inode_dest, sflag, abs_path, link_name);
 
     return 0;
 }
