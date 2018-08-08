@@ -48,8 +48,7 @@ int round_up(unsigned num, unsigned mult);
 
 /* Return the position of the very first bit equal to 0; otherwise return -1.
    Count is set to the total number of blocks or inodes*/
-int get_free_bitmap(struct ext2_super_block *, struct ext2_group_desc *,
-    unsigned char bitmap_ptr[], unsigned int count);
+int get_free_bitmap(unsigned char bitmap_ptr[], unsigned int count);
 
 void set_free_bitmap(int i, unsigned char bitmap_ptr[]);
 

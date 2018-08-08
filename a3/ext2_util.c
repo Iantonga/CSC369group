@@ -31,8 +31,7 @@ int my_ceil(float num) {
 }
 
 
-int get_free_bitmap(struct ext2_super_block *sb, struct ext2_group_desc *gd,
-    unsigned char bitmap_ptr[], unsigned int count) {
+int get_free_bitmap(unsigned char bitmap_ptr[], unsigned int count) {
 
     int pos = 0;
     while (pos < count) {
